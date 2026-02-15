@@ -402,12 +402,12 @@ body.mv-pseudo-fullscreen-body {
 /* zoom-container: place single page in the "left page" position of a spread */
 .mv-page-slot.mv-single-in-spread-rtl .mv-zoom-container {
   justify-content: center;
-  padding-right: 50%;
+  padding-left: 50%;
 }
 
 .mv-page-slot.mv-single-in-spread-ltr .mv-zoom-container {
   justify-content: center;
-  padding-left: 50%;
+  padding-right: 50%;
 }
 
 .mv-page-slot.mv-single-in-spread-ltr img,
