@@ -444,7 +444,18 @@ export default class MangaViewer {
     const btns = el('div', { className: 'mv-header-buttons' });
 
     // Bookmark
-    this._bookmarkBtn = el('button', { className: 'mv-header-btn mv-bookmark-btn', title: 'Bookmarks', innerHTML: ICONS.bookmark, onClick: () => this._toggleBookmarkPanel() });
+    this._bookmarkBtn = el('button', { className: 'mv-header-btn mv-bookmark-btn', title: 'Bookmarks', innerHTML: ICONS.bookmark });
+    // Single click = toggle bookmark on current page, long press = open panel
+    let _bmLongPress = false, _bmTimer = null;
+    this._bookmarkBtn.addEventListener('pointerdown', () => {
+      _bmLongPress = false;
+      _bmTimer = setTimeout(() => { _bmLongPress = true; this._toggleBookmarkPanel(); }, 500);
+    });
+    this._bookmarkBtn.addEventListener('pointerup', () => {
+      clearTimeout(_bmTimer);
+      if (!_bmLongPress) this._quickToggleBookmark();
+    });
+    this._bookmarkBtn.addEventListener('pointerleave', () => clearTimeout(_bmTimer));
     if (this.opts.bookmarks) btns.appendChild(this._bookmarkBtn);
 
     // Fullscreen (PC only)
@@ -1718,6 +1729,21 @@ export default class MangaViewer {
   }
 
   async _toggleCurrentPageBookmark() {
+    if (!this._bookmarkMgr) return;
+    const currentPage = this._getCurrentPageIndex() + 1;
+    if (this._bookmarkMgr.has(currentPage)) {
+      await this._bookmarkMgr.remove(currentPage);
+      this._showToast('しおりを削除しました');
+    } else {
+      const result = await this._bookmarkMgr.add(currentPage);
+      if (result.success) this._showToast('しおりを追加しました');
+      else this._showToast(result.error || 'エラーが発生しました');
+    }
+    this._renderBookmarkList();
+    this._updateBookmarkBtn();
+  }
+
+  async _quickToggleBookmark() {
     if (!this._bookmarkMgr) return;
     const currentPage = this._getCurrentPageIndex() + 1;
     if (this._bookmarkMgr.has(currentPage)) {
