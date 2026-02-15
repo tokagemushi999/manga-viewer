@@ -1,52 +1,41 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#000000">
-  <title>Manga Viewer — Demo</title>
+  <title>ブラックジャックによろしく 第1巻 — Manga Viewer Demo</title>
   <link rel="stylesheet" href="../src/manga-viewer.css">
   <style>
     html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; }
+    .credit {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: rgba(0,0,0,0.85); color: #ccc;
+      font-size: 11px; text-align: center; padding: 6px 10px;
+      z-index: 40; line-height: 1.5;
+    }
+    .mv-footer {
+      bottom: 28px !important;
+    }
+    .credit a { color: #8cf; }
   </style>
 </head>
 <body>
   <div id="viewer"></div>
+  <div class="credit">
+    「ブラックジャックによろしく」佐藤秀峰 ／
+    本デモは<a href="https://densho810.com/free/" target="_blank" rel="noopener">二次利用フリー規約</a>に基づき使用しています
+  </div>
   <script type="module">
     import MangaViewer from '../src/manga-viewer.js';
 
-    // Generate placeholder pages via canvas data-URLs
-    function generatePages(count) {
-      const pages = [];
-      for (let i = 1; i <= count; i++) {
-        const canvas = document.createElement('canvas');
-        canvas.width = 800;
-        canvas.height = 1200;
-        const ctx = canvas.getContext('2d');
-        // Background
-        ctx.fillStyle = i % 2 === 0 ? '#e8e8e8' : '#f4f4f4';
-        ctx.fillRect(0, 0, 800, 1200);
-        // Border
-        ctx.strokeStyle = '#ccc';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(20, 20, 760, 1160);
-        // Page number
-        ctx.fillStyle = '#333';
-        ctx.font = 'bold 72px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(`Page ${i}`, 400, 580);
-        // Subtitle
-        ctx.fillStyle = '#999';
-        ctx.font = '28px sans-serif';
-        ctx.fillText('Manga Viewer Demo', 400, 660);
-        pages.push(canvas.toDataURL('image/jpeg', 0.85));
-      }
-      return pages;
+    // Generate page URLs (page-001.jpg ~ page-209.jpg)
+    const totalPages = 209;
+    const pages = [];
+    for (let i = 1; i <= totalPages; i++) {
+      pages.push(`pages/page-${String(i).padStart(3, '0')}.jpg`);
     }
-
-    const pages = generatePages(20);
 
     const viewer = new MangaViewer({
       container: '#viewer',
@@ -54,11 +43,11 @@
       direction: 'rtl',
       firstPageSingle: true,
       viewMode: 'page',
-      title: 'Demo Manga — 20 Pages',
-      backUrl: 'https://github.com/tokagemushi/manga-viewer',
-      shareUrl: 'https://github.com/tokagemushi/manga-viewer',
-      storageKey: 'manga_viewer_demo',
-      loadingText: 'Loading...',
+      title: 'ブラックジャックによろしく 第1巻',
+      backUrl: '/article/manga-viewer',
+      shareUrl: 'https://github.com/tokagemushi999/manga-viewer',
+      storageKey: 'manga_viewer_bjyk_vol1',
+      loadingText: '読み込み中...',
     });
   </script>
 </body>
