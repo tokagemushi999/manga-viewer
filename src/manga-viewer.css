@@ -391,10 +391,9 @@ body.mv-pseudo-fullscreen-body {
 }
 
 /* ===== Blank page for single-page-in-spread ===== */
-.mv-blank-page {
-  width: 100%;
+.mv-spread-slot .mv-blank-page {
+  flex: 1;
   height: 100%;
-  background: #000;
 }
 
 /* ===== Spread Mode ===== */

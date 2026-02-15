@@ -544,7 +544,8 @@ export default class MangaViewer {
     } else {
       let i = 0;
       if (this.opts.firstPageSingle && pages.length > 0) {
-        this._slots.push({ pages: [0], spread: true, blankSide: this.opts.direction === 'rtl' ? 'right' : 'left' });
+        // Pair cover with a blank page as a normal spread
+        this._slots.push({ pages: [0], spread: true, hasBlank: true });
         i = 1;
       }
       while (i < pages.length) {
@@ -621,12 +622,17 @@ export default class MangaViewer {
         return `<img src="${escapeHtml(src)}" alt="Page ${pageIdx + 1}" draggable="false" loading="${loadingAttr}" decoding="async">`;
       }).join('');
 
-            // Add blank page for single-page-in-spread
+      // Add blank page for single-page-in-spread (cover)
       let finalImages = images;
-      if (slot.blankSide === 'left') {
-        finalImages = `<div class="mv-blank-page"></div>${images}`;
-      } else if (slot.blankSide === 'right') {
-        finalImages = `${images}<div class="mv-blank-page"></div>`;
+      if (slot.hasBlank) {
+        const blankHtml = `<div class="mv-blank-page"></div>`;
+        // Blank goes visually to the right of the cover
+        // RTL has row-reverse, so DOM order is reversed on screen
+        if (dir === 'rtl') {
+          finalImages = `${blankHtml}${images}`; // DOM [blank, img] → row-reverse → display [img(left), blank(right)]
+        } else {
+          finalImages = `${images}${blankHtml}`; // DOM [img, blank] → display [img(left), blank(right)]
+        }
       }
 
       html += `<div class="${classes}" data-slot="${realIdx}"><div class="mv-zoom-container" data-zoom-slot="${realIdx}">${finalImages}</div></div>`;
