@@ -1,0 +1,36 @@
+{
+  "name": "@tokagemushi/manga-viewer",
+  "version": "0.1.0",
+  "description": "A standalone, feature-rich manga and comic viewer for the web. RTL/LTR, pinch zoom, inertia, spread mode, swipe, keyboard navigation, and more.",
+  "main": "src/manga-viewer.js",
+  "module": "src/manga-viewer.js",
+  "type": "module",
+  "files": [
+    "src/",
+    "dist/",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "manga",
+    "comic",
+    "viewer",
+    "reader",
+    "rtl",
+    "pinch-zoom",
+    "swipe",
+    "spread",
+    "javascript",
+    "web-component"
+  ],
+  "author": "tokagemushi (https://tokagemushi.jp)",
+  "license": "MIT",
+  "homepage": "https://github.com/tokagemushi999/manga-viewer",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tokagemushi999/manga-viewer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tokagemushi999/manga-viewer/issues"
+  }
+}

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#000000">
+  <title>Manga Viewer — Demo</title>
+  <link rel="stylesheet" href="../src/manga-viewer.css">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; }
+  </style>
+</head>
+<body>
+  <div id="viewer"></div>
+  <script type="module">
+    import MangaViewer from '../src/manga-viewer.js';
+
+    // Generate placeholder pages via canvas data-URLs
+    function generatePages(count) {
+      const pages = [];
+      for (let i = 1; i <= count; i++) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 800;
+        canvas.height = 1200;
+        const ctx = canvas.getContext('2d');
+        // Background
+        ctx.fillStyle = i % 2 === 0 ? '#e8e8e8' : '#f4f4f4';
+        ctx.fillRect(0, 0, 800, 1200);
+        // Border
+        ctx.strokeStyle = '#ccc';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(20, 20, 760, 1160);
+        // Page number
+        ctx.fillStyle = '#333';
+        ctx.font = 'bold 72px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`Page ${i}`, 400, 580);
+        // Subtitle
+        ctx.fillStyle = '#999';
+        ctx.font = '28px sans-serif';
+        ctx.fillText('Manga Viewer Demo', 400, 660);
+        pages.push(canvas.toDataURL('image/jpeg', 0.85));
+      }
+      return pages;
+    }
+
+    const pages = generatePages(20);
+
+    const viewer = new MangaViewer({
+      container: '#viewer',
+      pages: pages,
+      direction: 'rtl',
+      firstPageSingle: true,
+      viewMode: 'page',
+      title: 'Demo Manga — 20 Pages',
+      backUrl: 'https://github.com/tokagemushi/manga-viewer',
+      shareUrl: 'https://github.com/tokagemushi/manga-viewer',
+      storageKey: 'manga_viewer_demo',
+      loadingText: 'Loading...',
+    });
+  </script>
+</body>
+</html>
