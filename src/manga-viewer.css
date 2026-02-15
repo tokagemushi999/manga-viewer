@@ -401,19 +401,16 @@ body.mv-pseudo-fullscreen-body {
 
 /* zoom-container: place single page in the "left page" position of a spread */
 .mv-page-slot.mv-single-in-spread-rtl .mv-zoom-container {
-  justify-content: center;
-  padding-left: 50%;
+  justify-content: flex-end;
 }
 
 .mv-page-slot.mv-single-in-spread-ltr .mv-zoom-container {
-  justify-content: center;
-  padding-right: 50%;
+  justify-content: flex-start;
 }
 
 .mv-page-slot.mv-single-in-spread-ltr img,
 .mv-page-slot.mv-single-in-spread-rtl img {
-  max-width: 100%;
-  max-height: 100%;
+  max-width: 50%;
 }
 
 /* ===== Spread Mode ===== */
