@@ -544,7 +544,7 @@ export default class MangaViewer {
     } else {
       let i = 0;
       if (this.opts.firstPageSingle && pages.length > 0) {
-        this._slots.push({ pages: [0], spread: false });
+        this._slots.push({ pages: [0], spread: true, blankSide: this.opts.direction === 'rtl' ? 'right' : 'left' });
         i = 1;
       }
       while (i < pages.length) {
@@ -578,8 +578,6 @@ export default class MangaViewer {
       if (slot.spread) {
         classes += ' mv-spread-slot';
         if (dir === 'rtl') classes += ' mv-rtl-slot';
-      } else if (this._spreadMode) {
-        classes += dir === 'rtl' ? ' mv-single-in-spread-rtl' : ' mv-single-in-spread-ltr';
       }
 
       const shouldEagerLoad = realIdx <= 2;
@@ -623,7 +621,15 @@ export default class MangaViewer {
         return `<img src="${escapeHtml(src)}" alt="Page ${pageIdx + 1}" draggable="false" loading="${loadingAttr}" decoding="async">`;
       }).join('');
 
-      html += `<div class="${classes}" data-slot="${realIdx}"><div class="mv-zoom-container" data-zoom-slot="${realIdx}">${images}</div></div>`;
+            // Add blank page for single-page-in-spread
+      let finalImages = images;
+      if (slot.blankSide === 'left') {
+        finalImages = `<div class="mv-blank-page"></div>${images}`;
+      } else if (slot.blankSide === 'right') {
+        finalImages = `${images}<div class="mv-blank-page"></div>`;
+      }
+
+      html += `<div class="${classes}" data-slot="${realIdx}"><div class="mv-zoom-container" data-zoom-slot="${realIdx}">${finalImages}</div></div>`;
     });
 
     this._slotTrack.innerHTML = html;

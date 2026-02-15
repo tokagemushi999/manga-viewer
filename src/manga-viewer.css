@@ -390,27 +390,11 @@ body.mv-pseudo-fullscreen-body {
   max-height: none;
 }
 
-/* ===== Single page in spread mode (cover, last page, etc.) ===== */
-.mv-page-slot.mv-single-in-spread-ltr {
-  justify-content: flex-end;
-}
-
-.mv-page-slot.mv-single-in-spread-rtl {
-  justify-content: flex-start;
-}
-
-/* zoom-container: place single page in the "left page" position of a spread */
-.mv-page-slot.mv-single-in-spread-rtl .mv-zoom-container {
-  justify-content: flex-end;
-}
-
-.mv-page-slot.mv-single-in-spread-ltr .mv-zoom-container {
-  justify-content: flex-start;
-}
-
-.mv-page-slot.mv-single-in-spread-ltr img,
-.mv-page-slot.mv-single-in-spread-rtl img {
-  max-width: 50%;
+/* ===== Blank page for single-page-in-spread ===== */
+.mv-blank-page {
+  width: 100%;
+  height: 100%;
+  background: #000;
 }
 
 /* ===== Spread Mode ===== */
