@@ -392,8 +392,11 @@ body.mv-pseudo-fullscreen-body {
 
 /* ===== Blank page for single-page-in-spread ===== */
 .mv-spread-slot .mv-blank-page {
-  flex: 1;
   height: 100%;
+  width: auto;
+  max-width: 50%;
+  max-height: 100%;
+  background: #000;
 }
 
 /* ===== Spread Mode ===== */

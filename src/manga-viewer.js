@@ -625,13 +625,13 @@ export default class MangaViewer {
       // Add blank page for single-page-in-spread (cover)
       let finalImages = images;
       if (slot.hasBlank) {
-        const blankHtml = `<div class="mv-blank-page"></div>`;
-        // Blank goes visually to the right of the cover
-        // RTL has row-reverse, so DOM order is reversed on screen
+        // Render blank as a div that mirrors the cover image size via aspect-ratio
+        const coverPage = this._pages[slot.pages[0]];
+        const blankImg = `<div class="mv-blank-page" aria-hidden="true"></div>`;
         if (dir === 'rtl') {
-          finalImages = `${blankHtml}${images}`; // DOM [blank, img] → row-reverse → display [img(left), blank(right)]
+          finalImages = `${blankImg}${images}`;
         } else {
-          finalImages = `${images}${blankHtml}`; // DOM [img, blank] → display [img(left), blank(right)]
+          finalImages = `${images}${blankImg}`;
         }
       }
 
@@ -639,6 +639,21 @@ export default class MangaViewer {
     });
 
     this._slotTrack.innerHTML = html;
+
+    // Match blank page size to adjacent cover image
+    this._slotTrack.querySelectorAll('.mv-blank-page').forEach(blank => {
+      const sibling = blank.parentElement.querySelector('img');
+      if (sibling) {
+        const matchSize = () => {
+          if (sibling.naturalWidth && sibling.naturalHeight) {
+            blank.style.aspectRatio = `${sibling.naturalWidth} / ${sibling.naturalHeight}`;
+          }
+        };
+        if (sibling.complete) matchSize();
+        else sibling.addEventListener('load', matchSize, { once: true });
+      }
+    });
+
     this._preloadNearby();
 
     // AdSense push
