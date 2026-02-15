@@ -390,6 +390,29 @@ body.mv-pseudo-fullscreen-body {
   max-height: none;
 }
 
+/* ===== Single page in spread mode (cover, last page, etc.) ===== */
+.mv-page-slot.mv-single-in-spread-ltr {
+  justify-content: flex-end;
+}
+
+.mv-page-slot.mv-single-in-spread-rtl {
+  justify-content: flex-start;
+}
+
+/* zoom-container also needs alignment override */
+.mv-page-slot.mv-single-in-spread-ltr .mv-zoom-container {
+  justify-content: flex-end;
+}
+
+.mv-page-slot.mv-single-in-spread-rtl .mv-zoom-container {
+  justify-content: flex-start;
+}
+
+.mv-page-slot.mv-single-in-spread-ltr img,
+.mv-page-slot.mv-single-in-spread-rtl img {
+  max-width: 50%;
+}
+
 /* ===== Spread Mode ===== */
 .mv-page-slot.mv-spread-slot {
   display: flex;

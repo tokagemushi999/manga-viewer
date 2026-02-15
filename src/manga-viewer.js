@@ -578,6 +578,8 @@ export default class MangaViewer {
       if (slot.spread) {
         classes += ' mv-spread-slot';
         if (dir === 'rtl') classes += ' mv-rtl-slot';
+      } else if (this._spreadMode) {
+        classes += dir === 'rtl' ? ' mv-single-in-spread-rtl' : ' mv-single-in-spread-ltr';
       }
 
       const shouldEagerLoad = realIdx <= 2;
