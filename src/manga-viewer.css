@@ -399,18 +399,21 @@ body.mv-pseudo-fullscreen-body {
   justify-content: flex-start;
 }
 
-/* zoom-container also needs alignment override */
-.mv-page-slot.mv-single-in-spread-ltr .mv-zoom-container {
-  justify-content: flex-end;
+/* zoom-container: place single page in the "left page" position of a spread */
+.mv-page-slot.mv-single-in-spread-rtl .mv-zoom-container {
+  justify-content: center;
+  padding-right: 50%;
 }
 
-.mv-page-slot.mv-single-in-spread-rtl .mv-zoom-container {
-  justify-content: flex-start;
+.mv-page-slot.mv-single-in-spread-ltr .mv-zoom-container {
+  justify-content: center;
+  padding-left: 50%;
 }
 
 .mv-page-slot.mv-single-in-spread-ltr img,
 .mv-page-slot.mv-single-in-spread-rtl img {
-  max-width: 50%;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 /* ===== Spread Mode ===== */
