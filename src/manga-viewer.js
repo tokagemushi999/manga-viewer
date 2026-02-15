@@ -57,6 +57,132 @@ function el(tag, attrs = {}, children = []) {
 }
 
 // ──────────────────────────────────────────
+// Bookmark Manager
+// ──────────────────────────────────────────
+class BookmarkManager {
+  constructor(opts = {}) {
+    this._api = opts.bookmarkApi || null;
+    this._headers = opts.bookmarkHeaders || {};
+    this._id = opts.bookmarkId || this._hashString(location.pathname);
+    this._storageKey = `mv-bookmarks-${this._id}`;
+    this._maxBookmarks = 20;
+    this._bookmarks = []; // [{page_number, title, note?}]
+    this._onChange = opts.onBookmarkChange || null;
+  }
+
+  _hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash).toString(36);
+  }
+
+  async load() {
+    if (this._api) {
+      try {
+        const res = await fetch(`${this._api}?work_id=${encodeURIComponent(this._id)}`, {
+          headers: this._headers,
+        });
+        const data = await res.json();
+        if (data.success) this._bookmarks = data.bookmarks || [];
+      } catch (_) {
+        this._loadLocal();
+      }
+    } else {
+      this._loadLocal();
+    }
+    return this._bookmarks;
+  }
+
+  _loadLocal() {
+    try {
+      const raw = localStorage.getItem(this._storageKey);
+      this._bookmarks = raw ? JSON.parse(raw) : [];
+    } catch (_) {
+      this._bookmarks = [];
+    }
+  }
+
+  _saveLocal() {
+    try {
+      localStorage.setItem(this._storageKey, JSON.stringify(this._bookmarks));
+    } catch (_) { /* quota */ }
+  }
+
+  _notify() {
+    if (typeof this._onChange === 'function') this._onChange([...this._bookmarks]);
+  }
+
+  get bookmarks() { return this._bookmarks; }
+
+  has(pageNum) {
+    return this._bookmarks.some(b => b.page_number === pageNum);
+  }
+
+  async add(pageNum, title) {
+    if (this._bookmarks.length >= this._maxBookmarks && !this.has(pageNum)) {
+      return { success: false, error: `しおりは${this._maxBookmarks}個までです` };
+    }
+    title = title || `ページ${pageNum}`;
+
+    if (this._api) {
+      try {
+        const res = await fetch(this._api, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...this._headers },
+          body: JSON.stringify({ work_id: this._id, page_number: pageNum, title }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          const idx = this._bookmarks.findIndex(b => b.page_number === pageNum);
+          if (idx >= 0) this._bookmarks[idx].title = title;
+          else this._bookmarks.push({ page_number: pageNum, title });
+          this._bookmarks.sort((a, b) => a.page_number - b.page_number);
+          this._notify();
+        }
+        return data;
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+    }
+
+    const idx = this._bookmarks.findIndex(b => b.page_number === pageNum);
+    if (idx >= 0) this._bookmarks[idx].title = title;
+    else this._bookmarks.push({ page_number: pageNum, title });
+    this._bookmarks.sort((a, b) => a.page_number - b.page_number);
+    this._saveLocal();
+    this._notify();
+    return { success: true };
+  }
+
+  async remove(pageNum) {
+    if (this._api) {
+      try {
+        const res = await fetch(this._api, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', ...this._headers },
+          body: JSON.stringify({ work_id: this._id, page_number: pageNum }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          this._bookmarks = this._bookmarks.filter(b => b.page_number !== pageNum);
+          this._notify();
+        }
+        return data;
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+    }
+
+    this._bookmarks = this._bookmarks.filter(b => b.page_number !== pageNum);
+    this._saveLocal();
+    this._notify();
+    return { success: true };
+  }
+}
+
+// ──────────────────────────────────────────
 // MangaViewer class
 // ──────────────────────────────────────────
 export default class MangaViewer {
@@ -106,6 +232,11 @@ export default class MangaViewer {
       purchaseUrl: '',
       purchasePrice: '',
       loadingText: 'Loading...',
+      bookmarks: true,
+      bookmarkId: '',
+      bookmarkApi: null,
+      bookmarkHeaders: {},
+      onBookmarkChange: null,
     }, options);
 
     this.opts = o;
@@ -225,6 +356,10 @@ export default class MangaViewer {
     // Bound handlers (for cleanup)
     this._bound = {};
 
+    // Bookmark manager
+    this._bookmarkMgr = null;
+    this._bookmarkPanelOpen = false;
+
     // Build DOM & init
     this._build();
     this._init();
@@ -308,6 +443,10 @@ export default class MangaViewer {
     // Right buttons
     const btns = el('div', { className: 'mv-header-buttons' });
 
+    // Bookmark
+    this._bookmarkBtn = el('button', { className: 'mv-header-btn mv-bookmark-btn', title: 'Bookmarks', innerHTML: ICONS.bookmark, onClick: () => this._toggleBookmarkPanel() });
+    if (this.opts.bookmarks) btns.appendChild(this._bookmarkBtn);
+
     // Fullscreen (PC only)
     this._fullscreenBtn = el('button', { className: 'mv-header-btn mv-pc-only', title: 'Fullscreen', innerHTML: ICONS.expand, onClick: () => this._toggleFullscreen() });
     btns.appendChild(this._fullscreenBtn);
@@ -379,6 +518,9 @@ export default class MangaViewer {
     setTimeout(() => {
       if (this._loadingEl) this._loadingEl.classList.add('mv-fade-out');
     }, 300);
+
+    // Init bookmarks
+    if (this.opts.bookmarks) this._initBookmarks();
   }
 
   // ─── Slots ───
@@ -1053,6 +1195,9 @@ export default class MangaViewer {
       this._closePurchasePopup();
     }
 
+    // Bookmark state
+    this._updateBookmarkBtn();
+
     // Callbacks
     if (typeof this.opts.onPageChange === 'function') {
       this.opts.onPageChange(first, this._totalPages);
@@ -1489,12 +1634,120 @@ export default class MangaViewer {
     if (p) p.remove();
   }
 
+  // ─── Bookmarks ───
+  async _initBookmarks() {
+    this._bookmarkMgr = new BookmarkManager({
+      bookmarkApi: this.opts.bookmarkApi,
+      bookmarkHeaders: this.opts.bookmarkHeaders,
+      bookmarkId: this.opts.bookmarkId,
+      onBookmarkChange: this.opts.onBookmarkChange,
+    });
+    await this._bookmarkMgr.load();
+    this._buildBookmarkPanel();
+    this._updateBookmarkBtn();
+  }
+
+  _buildBookmarkPanel() {
+    this._bookmarkPanel = el('div', { className: 'mv-bookmark-panel' });
+    this._bookmarkOverlay = el('div', { className: 'mv-bookmark-overlay', onClick: () => this._toggleBookmarkPanel() });
+
+    // Header
+    const header = el('div', { className: 'mv-bookmark-panel-header' });
+    header.appendChild(el('span', { className: 'mv-bookmark-panel-title' }, 'しおり'));
+    header.appendChild(el('button', { className: 'mv-bookmark-panel-close', innerHTML: ICONS.times, onClick: () => this._toggleBookmarkPanel() }));
+    this._bookmarkPanel.appendChild(header);
+
+    // Add/remove button for current page
+    this._bookmarkToggleBtn = el('button', { className: 'mv-bookmark-toggle-btn', onClick: () => this._toggleCurrentPageBookmark() });
+    this._bookmarkPanel.appendChild(this._bookmarkToggleBtn);
+
+    // List
+    this._bookmarkList = el('div', { className: 'mv-bookmark-list' });
+    this._bookmarkPanel.appendChild(this._bookmarkList);
+
+    this._container.appendChild(this._bookmarkOverlay);
+    this._container.appendChild(this._bookmarkPanel);
+    this._renderBookmarkList();
+  }
+
+  _toggleBookmarkPanel() {
+    this._bookmarkPanelOpen = !this._bookmarkPanelOpen;
+    this._bookmarkPanel.classList.toggle('mv-open', this._bookmarkPanelOpen);
+    this._bookmarkOverlay.classList.toggle('mv-open', this._bookmarkPanelOpen);
+    if (this._bookmarkPanelOpen) this._renderBookmarkList();
+  }
+
+  _renderBookmarkList() {
+    if (!this._bookmarkMgr || !this._bookmarkList) return;
+    const bms = this._bookmarkMgr.bookmarks;
+    const currentPage = this._getCurrentPageIndex() + 1;
+
+    // Update toggle button
+    const hasCurrent = this._bookmarkMgr.has(currentPage);
+    this._bookmarkToggleBtn.textContent = '';
+    this._bookmarkToggleBtn.innerHTML = hasCurrent
+      ? ICONS.bookmark + ' しおりを削除'
+      : ICONS.bookmark + ' 現在のページをブックマーク';
+    this._bookmarkToggleBtn.classList.toggle('mv-bookmark-remove', hasCurrent);
+
+    // List
+    this._bookmarkList.innerHTML = '';
+    if (bms.length === 0) {
+      this._bookmarkList.appendChild(el('div', { className: 'mv-bookmark-empty' }, 'しおりはまだありません'));
+      return;
+    }
+    bms.forEach(bm => {
+      const item = el('div', { className: 'mv-bookmark-item' + (bm.page_number === currentPage ? ' mv-active' : ''), onClick: () => {
+        this.goToPage(bm.page_number);
+        this._toggleBookmarkPanel();
+      }});
+      const info = el('div', { className: 'mv-bookmark-item-info' });
+      info.appendChild(el('span', { className: 'mv-bookmark-item-page' }, `${bm.page_number}ページ`));
+      info.appendChild(el('span', { className: 'mv-bookmark-item-title' }, bm.title || `ページ${bm.page_number}`));
+      item.appendChild(info);
+      const delBtn = el('button', { className: 'mv-bookmark-item-delete', innerHTML: ICONS.times, onClick: (e) => {
+        e.stopPropagation();
+        this._bookmarkMgr.remove(bm.page_number).then(() => {
+          this._renderBookmarkList();
+          this._updateBookmarkBtn();
+        });
+      }});
+      item.appendChild(delBtn);
+      this._bookmarkList.appendChild(item);
+    });
+  }
+
+  async _toggleCurrentPageBookmark() {
+    if (!this._bookmarkMgr) return;
+    const currentPage = this._getCurrentPageIndex() + 1;
+    if (this._bookmarkMgr.has(currentPage)) {
+      await this._bookmarkMgr.remove(currentPage);
+      this._showToast('しおりを削除しました');
+    } else {
+      const result = await this._bookmarkMgr.add(currentPage);
+      if (result.success) this._showToast('しおりを追加しました');
+      else this._showToast(result.error || 'エラーが発生しました');
+    }
+    this._renderBookmarkList();
+    this._updateBookmarkBtn();
+  }
+
+  _updateBookmarkBtn() {
+    if (!this._bookmarkMgr || !this._bookmarkBtn) return;
+    const currentPage = this._getCurrentPageIndex() + 1;
+    const active = this._bookmarkMgr.has(currentPage);
+    this._bookmarkBtn.classList.toggle('mv-bookmark-active', active);
+  }
+
   // ─── Public API ───
   /** Get current page number (1-indexed) */
   get currentPage() { return this._getCurrentPageIndex() + 1; }
 
   /** Get total page count */
   get totalPages() { return this._totalPages; }
+
+  /** Get bookmark manager */
+  get bookmarkManager() { return this._bookmarkMgr; }
 
   /** Destroy viewer and clean up */
   destroy() {
