@@ -87,6 +87,8 @@ That's it. The viewer takes over the container element with a full-screen readin
 | `title` | `string` | `''` | Displayed in the header |
 | `backUrl` | `string` | `'/'` | URL for the back button |
 | `shareUrl` | `string` | `''` | URL used for share/copy (defaults to current page) |
+| `bookmarkEnabled` | `boolean` | `true` | Enable bookmark UI and bookmark manager |
+| `bookmarkApi` | `string \| null` | `null` | API endpoint used to sync bookmarks (falls back to localStorage) |
 | `storageKey` | `string` | `'manga_progress'` | localStorage key for reading progress |
 | `showHeader` | `boolean` | `true` | Show/hide header bar |
 | `showFooter` | `boolean` | `true` | Show/hide footer bar |

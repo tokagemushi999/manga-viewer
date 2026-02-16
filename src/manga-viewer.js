@@ -1,5 +1,5 @@
 /**
- * Manga Viewer v0.1.0
+ * Manga Viewer v0.1.3
  * A standalone, feature-rich manga/comic viewer for the web.
  *
  * https://github.com/tokagemushi/manga-viewer
@@ -608,7 +608,7 @@ export default class MangaViewer {
           const bg = page.backgroundColor || '#000';
           const content = page.html || '';
           if (page.linkUrl) {
-            return `<a href="${escapeHtml(page.linkUrl)}" target="${page.linkTarget || '_blank'}" style="background:${bg};display:flex;align-items:center;justify-content:center;width:100%;height:100%;">${content}</a>`;
+            return `<a href="${escapeHtml(page.linkUrl)}" target="${page.linkTarget || '_blank'}" rel="noopener noreferrer" style="background:${bg};display:flex;align-items:center;justify-content:center;width:100%;height:100%;">${content}</a>`;
           }
           return `<div style="background:${bg};display:flex;align-items:center;justify-content:center;width:100%;height:100%;">${content}</div>`;
         }
@@ -617,7 +617,7 @@ export default class MangaViewer {
         const src = page.src || '';
         const bg = page.backgroundColor || '';
         if (page.linkUrl) {
-          return `<a href="${escapeHtml(page.linkUrl)}" target="${page.linkTarget || '_blank'}" style="background:${bg};display:flex;align-items:center;justify-content:center;"><img src="${escapeHtml(src)}" alt="Page ${pageIdx + 1}" draggable="false" loading="${loadingAttr}" decoding="async" style="max-width:100%;max-height:100%;object-fit:contain;"></a>`;
+          return `<a href="${escapeHtml(page.linkUrl)}" target="${page.linkTarget || '_blank'}" rel="noopener noreferrer" style="background:${bg};display:flex;align-items:center;justify-content:center;"><img src="${escapeHtml(src)}" alt="Page ${pageIdx + 1}" draggable="false" loading="${loadingAttr}" decoding="async" style="max-width:100%;max-height:100%;object-fit:contain;"></a>`;
         }
         return `<img src="${escapeHtml(src)}" alt="Page ${pageIdx + 1}" draggable="false" loading="${loadingAttr}" decoding="async">`;
       }).join('');
