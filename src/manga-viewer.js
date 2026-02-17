@@ -1,5 +1,5 @@
 /**
- * Manga Viewer v0.1.3
+ * Manga Viewer v0.2.0
  * A standalone, feature-rich manga/comic viewer for the web.
  *
  * https://github.com/tokagemushi/manga-viewer
@@ -24,6 +24,1180 @@ const ICONS = {
   times:        '<svg viewBox="0 0 384 512" width="14" height="14" fill="currentColor"><path d="M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3l105.4 105.3c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256l105.3-105.4z"/></svg>',
   play:         '<svg viewBox="0 0 384 512" width="14" height="14" fill="currentColor"><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.8 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>',
 };
+
+const MANGA_VIEWER_CSS = String.raw`/**
+ * Manga Viewer v0.2.0
+ * https://github.com/tokagemushi/manga-viewer
+ * (c) tokagemushi — MIT License
+ */
+
+/* ===== Reset / Base ===== */
+.mv-loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+
+@media (max-width: 768px) {
+  .mv-loading-screen { background: #fff; }
+}
+
+.mv-loading-screen.mv-fade-out {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.mv-loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(250, 204, 21, 0.2);
+  border-top-color: #facc15;
+  border-radius: 50%;
+  animation: mv-spin 0.8s linear infinite;
+}
+
+@media (max-width: 768px) {
+  .mv-loading-spinner {
+    border-color: rgba(100, 100, 100, 0.2);
+    border-top-color: #666;
+  }
+}
+
+.mv-loading-text {
+  margin-top: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .mv-loading-text { color: rgba(0, 0, 0, 0.5); }
+}
+
+@keyframes mv-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ===== Container ===== */
+.mv-container {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  background: #000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  color: #fff;
+  -webkit-text-size-adjust: 100%;
+  box-sizing: border-box;
+}
+
+.mv-container *, .mv-container *::before, .mv-container *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+@media (max-width: 768px) {
+  .mv-container { background: #fff; }
+}
+
+.mv-container.mv-pseudo-fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 9999;
+}
+
+body.mv-pseudo-fullscreen-body {
+  overflow: hidden;
+}
+
+/* ===== Status Bar Cover (mobile notch) ===== */
+.mv-status-bar-cover {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: #fff;
+  z-index: 45;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.mv-status-bar-cover.mv-visible { opacity: 1; }
+
+@media (min-width: 769px) {
+  .mv-status-bar-cover { display: none; }
+}
+
+/* ===== Header ===== */
+.mv-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: auto;
+  padding: 8px 12px;
+  padding-top: max(8px, env(safe-area-inset-top));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 50;
+  background: rgba(40, 40, 40, 0.95);
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .mv-header {
+    background: rgba(245, 245, 245, 0.98);
+  }
+  .mv-header .mv-title { color: #333 !important; }
+}
+
+.mv-header.mv-ui-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mv-header.mv-hidden {
+  display: none !important;
+}
+
+.mv-title {
+  color: #fff;
+  font-weight: bold;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  text-align: center;
+  margin: 0 12px;
+}
+
+.mv-header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mv-header-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.mv-header-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.mv-header-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+@media (max-width: 768px) {
+  .mv-header-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+    background: rgba(0, 0, 0, 0.06);
+    color: #333;
+  }
+  .mv-header-btn:hover { background: rgba(0, 0, 0, 0.1); }
+  .mv-header-btn svg { fill: #333; }
+  .mv-title { font-size: 13px; }
+}
+
+/* ===== Footer ===== */
+.mv-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 12px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  z-index: 50;
+  background: rgba(40, 40, 40, 0.95);
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .mv-footer {
+    background: rgba(245, 245, 245, 0.98);
+    padding: 10px 16px 16px 16px;
+    padding-bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px));
+  }
+  .mv-footer .mv-footer-info,
+  .mv-footer span { color: #333 !important; }
+}
+
+.mv-footer.mv-ui-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mv-footer.mv-hidden {
+  display: none !important;
+}
+
+.mv-footer-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  color: #fff;
+  font-size: 12px;
+}
+
+.mv-footer-info span {
+  opacity: 0.7;
+}
+
+/* ===== Slider ===== */
+.mv-page-slider {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .mv-page-slider {
+    background: rgba(0, 0, 0, 0.15);
+    height: 8px;
+    margin-top: 4px;
+  }
+}
+
+.mv-page-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #facc15;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.mv-page-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: #facc15;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-width: 768px) {
+  .mv-page-slider::-webkit-slider-thumb { width: 22px; height: 22px; }
+  .mv-page-slider::-moz-range-thumb { width: 22px; height: 22px; }
+}
+
+.mv-page-slider.mv-rtl-slider {
+  direction: rtl;
+}
+
+/* ===== Main Viewer Area ===== */
+.mv-main {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+@media (max-width: 768px) {
+  .mv-main { background: #fff; }
+}
+
+.mv-main.mv-scroll-mode {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ===== Slot Track ===== */
+.mv-slot-track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  transform: var(--mv-track-transform, translateX(0px));
+  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.mv-slot-track.mv-no-transition {
+  transition: none;
+}
+
+.mv-slot-track.mv-scroll-track {
+  flex-direction: column;
+  height: auto;
+  transition: none;
+}
+
+/* ===== Page Slot ===== */
+.mv-page-slot {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+@media all and (display-mode: standalone) {
+  .mv-page-slot {
+    padding-bottom: env(safe-area-inset-top, 0px);
+  }
+}
+
+.mv-scroll-track .mv-page-slot {
+  flex: 0 0 auto;
+  height: auto;
+  min-height: auto;
+}
+
+/* ===== Zoom Container ===== */
+.mv-zoom-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+  transform: var(--mv-zoom-transform, scale(1) translate(0px, 0px));
+  touch-action: none;
+  transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.mv-zoom-container.mv-no-transition {
+  transition: none !important;
+}
+
+/* ===== Page Images ===== */
+.mv-page-slot img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+  pointer-events: auto;
+  display: block;
+}
+
+.mv-scroll-track .mv-page-slot img {
+  width: 100%;
+  height: auto;
+  max-height: none;
+}
+
+/* ===== Blank page for single-page-in-spread ===== */
+.mv-spread-slot .mv-blank-page {
+  height: 100%;
+  width: auto;
+  aspect-ratio: var(--mv-blank-aspect-ratio, auto);
+  max-width: 50%;
+  max-height: 100%;
+  background: #000;
+}
+
+.mv-page-fill {
+  width: 100%;
+  height: 100%;
+}
+
+.mv-page-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mv-page-bg {
+  background: var(--mv-page-bg, transparent);
+}
+
+.mv-page-link {
+  text-decoration: none;
+}
+
+.mv-display-none {
+  display: none !important;
+}
+
+.mv-adsense-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.mv-adsense-inner {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.mv-adsense-slot {
+  display: block;
+  min-width: 300px;
+  min-height: 250px;
+  width: 100%;
+}
+
+.mv-adsense-label {
+  margin-top: 20px;
+  color: #666;
+  font-size: 12px;
+  text-align: center;
+}
+
+.mv-purchase-trigger {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+/* ===== Spread Mode ===== */
+.mv-page-slot.mv-spread-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.mv-page-slot.mv-spread-slot .mv-zoom-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.mv-page-slot.mv-spread-slot img {
+  height: 100%;
+  width: auto;
+  max-width: 50%;
+  max-height: 100%;
+}
+
+.mv-page-slot.mv-spread-slot.mv-rtl-slot .mv-zoom-container {
+  flex-direction: row-reverse;
+}
+
+/* ===== Tap Areas ===== */
+.mv-tap-area {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 10;
+}
+
+.mv-tap-area.mv-left { left: 0; width: 30%; }
+.mv-tap-area.mv-right { right: 0; width: 30%; }
+.mv-tap-area.mv-center { left: 30%; width: 40%; }
+
+/* ===== Zoom Controls ===== */
+.mv-zoom-controls {
+  position: fixed;
+  bottom: 100px;
+  right: 16px;
+  z-index: 60;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  transition: opacity 0.3s ease;
+}
+
+.mv-zoom-controls.mv-ui-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (min-width: 769px) {
+  .mv-zoom-controls { display: flex; }
+}
+
+@media (max-width: 768px) {
+  .mv-zoom-controls { display: none !important; }
+}
+
+.mv-zoom-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 18px;
+}
+
+.mv-zoom-btn:hover {
+  background: rgba(250, 204, 21, 0.8);
+  color: black;
+}
+
+.mv-zoom-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.mv-zoom-btn:disabled:hover {
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+}
+
+/* ===== Resume Dialog ===== */
+.mv-resume-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: mv-fadeIn 0.3s ease;
+}
+
+@keyframes mv-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.mv-resume-card {
+  background: white;
+  border-radius: 24px;
+  padding: 32px;
+  max-width: 340px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: mv-slideUp 0.3s ease;
+}
+
+@keyframes mv-slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.mv-resume-icon {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+}
+
+.mv-resume-icon svg {
+  width: 28px;
+  height: 28px;
+  fill: #fff;
+}
+
+.mv-resume-title {
+  color: #1f2937;
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.mv-resume-subtitle {
+  color: #6b7280;
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+.mv-resume-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.mv-resume-btn {
+  flex: 1;
+  padding: 14px 16px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.mv-resume-btn.mv-primary {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+}
+
+.mv-resume-btn.mv-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.4);
+}
+
+.mv-resume-btn.mv-secondary {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
+
+.mv-resume-btn.mv-secondary:hover {
+  background: #e5e7eb;
+}
+
+/* ===== Help Overlay ===== */
+.mv-help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.mv-help-card {
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  max-width: 400px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+@media (max-width: 768px) {
+  .mv-help-card { max-height: 70vh; }
+}
+
+.mv-help-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mv-help-title {
+  color: #facc15;
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mv-help-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.mv-help-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.mv-help-content {
+  padding: 20px 24px;
+}
+
+.mv-help-section {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.mv-help-section:last-child { margin-bottom: 0; }
+
+.mv-help-section-title {
+  color: #facc15;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mv-help-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.mv-help-item:last-child { margin-bottom: 0; }
+
+.mv-help-item-icon {
+  width: 32px;
+  height: 32px;
+  background: rgba(250, 204, 21, 0.15);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #facc15;
+  font-size: 14px;
+}
+
+.mv-help-item-text { flex: 1; }
+
+.mv-help-item-label {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.mv-help-item-desc {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+
+/* ===== Toast ===== */
+.mv-toast {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 400;
+  font-family: 'Zen Maru Gothic', "Hiragino Kaku Gothic ProN", "Hiragino Sans", sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-align: center;
+  max-width: 90vw;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  animation: mv-toastIn 0.3s ease;
+}
+
+.mv-toast.mv-fade-out {
+  animation: mv-toastOut 0.3s ease forwards;
+}
+
+@keyframes mv-toastIn {
+  from { opacity: 0; transform: translate(-50%, 20px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@keyframes mv-toastOut {
+  from { opacity: 1; transform: translate(-50%, 0); }
+  to { opacity: 0; transform: translate(-50%, 20px); }
+}
+
+/* ===== Purchase Popup ===== */
+.mv-purchase-popup {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+  pointer-events: none;
+}
+
+.mv-purchase-card {
+  background: white;
+  border-radius: 24px;
+  padding: 32px;
+  max-width: 380px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  text-align: center;
+  pointer-events: auto;
+}
+
+.mv-purchase-icon {
+  width: 72px;
+  height: 72px;
+  background: linear-gradient(135deg, #22c55e, #10b981);
+  border-radius: 50%;
+  margin: 0 auto 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mv-purchase-title {
+  font-size: 1.4rem;
+  font-weight: bold;
+  margin-bottom: 12px;
+  color: #1f2937;
+}
+
+.mv-purchase-desc {
+  color: #6b7280;
+  margin-bottom: 6px;
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
+.mv-purchase-btn {
+  display: block;
+  background: linear-gradient(135deg, #22c55e, #10b981);
+  color: white;
+  padding: 16px 32px;
+  border-radius: 12px;
+  font-weight: bold;
+  font-size: 1.1rem;
+  text-decoration: none;
+  margin-bottom: 12px;
+  margin-top: 24px;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+  border: none;
+  cursor: pointer;
+  width: 100%;
+}
+
+.mv-purchase-back {
+  display: block;
+  color: #6b7280;
+  font-size: 0.9rem;
+  padding: 8px 16px;
+  text-decoration: none;
+}
+
+/* ===== Responsive helpers ===== */
+@media (min-width: 769px) {
+  .mv-mobile-only { display: none !important; }
+}
+
+@media (max-width: 768px) {
+  .mv-pc-only { display: none !important; }
+}
+
+/* ===== Bookmark Button Active ===== */
+.mv-bookmark-btn.mv-bookmark-active {
+  color: #facc15 !important;
+}
+
+@media (max-width: 768px) {
+  .mv-bookmark-btn.mv-bookmark-active {
+    color: #f59e0b !important;
+  }
+  .mv-bookmark-btn.mv-bookmark-active svg {
+    fill: #f59e0b !important;
+  }
+}
+
+/* ===== Bookmark Panel Overlay ===== */
+.mv-bookmark-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 90;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.mv-bookmark-overlay.mv-open {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ===== Bookmark Panel ===== */
+.mv-bookmark-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  max-width: 85vw;
+  background: rgba(30, 30, 30, 0.98);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  z-index: 100;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[dir="rtl"] .mv-bookmark-panel,
+.mv-bookmark-panel.mv-rtl {
+  right: auto;
+  left: 0;
+  transform: translateX(-100%);
+}
+
+.mv-bookmark-panel.mv-open {
+  transform: translateX(0);
+}
+
+@media (max-width: 768px) {
+  .mv-bookmark-panel {
+    background: rgba(250, 250, 250, 0.98);
+  }
+}
+
+/* Panel header */
+.mv-bookmark-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  padding-top: max(16px, env(safe-area-inset-top));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 768px) {
+  .mv-bookmark-panel-header {
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+  }
+}
+
+.mv-bookmark-panel-title {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+@media (max-width: 768px) {
+  .mv-bookmark-panel-title { color: #333; }
+}
+
+.mv-bookmark-panel-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.mv-bookmark-panel-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+  .mv-bookmark-panel-close {
+    background: rgba(0, 0, 0, 0.06);
+    color: #666;
+  }
+  .mv-bookmark-panel-close:hover { background: rgba(0, 0, 0, 0.1); }
+}
+
+/* Toggle button (add/remove current page) */
+.mv-bookmark-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 16px 20px 8px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #facc15, #f59e0b);
+  color: #000;
+  font-weight: 600;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mv-bookmark-toggle-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(250, 204, 21, 0.3);
+}
+
+.mv-bookmark-toggle-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.mv-bookmark-toggle-btn.mv-bookmark-remove {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.mv-bookmark-toggle-btn.mv-bookmark-remove:hover {
+  background: rgba(239, 68, 68, 0.25);
+  box-shadow: none;
+}
+
+@media (max-width: 768px) {
+  .mv-bookmark-toggle-btn.mv-bookmark-remove {
+    background: rgba(239, 68, 68, 0.1);
+  }
+}
+
+/* Bookmark list */
+.mv-bookmark-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mv-bookmark-empty {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+  padding: 32px 16px;
+}
+
+@media (max-width: 768px) {
+  .mv-bookmark-empty { color: rgba(0, 0, 0, 0.35); }
+}
+
+.mv-bookmark-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  margin-bottom: 4px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.mv-bookmark-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mv-bookmark-item.mv-active {
+  background: rgba(250, 204, 21, 0.12);
+}
+
+@media (max-width: 768px) {
+  .mv-bookmark-item:hover { background: rgba(0, 0, 0, 0.05); }
+  .mv-bookmark-item.mv-active { background: rgba(250, 204, 21, 0.1); }
+}
+
+.mv-bookmark-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mv-bookmark-item-page {
+  font-size: 12px;
+  color: #facc15;
+  font-weight: 600;
+}
+
+.mv-bookmark-item-title {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 768px) {
+  .mv-bookmark-item-title { color: #333; }
+  .mv-bookmark-item-page { color: #f59e0b; }
+}
+
+.mv-bookmark-item-delete {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  margin-left: 8px;
+}
+
+.mv-bookmark-item-delete:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+@media (max-width: 768px) {
+  .mv-bookmark-item-delete { color: rgba(0, 0, 0, 0.25); }
+  .mv-bookmark-item-delete:hover { color: #ef4444; }
+}
+
+/* ===== SVG icon defaults inside viewer ===== */
+.mv-container svg {
+  display: inline-block;
+  vertical-align: middle;
+}
+`;
 
 // ──────────────────────────────────────────
 // Helpers
@@ -242,10 +1416,12 @@ export default class MangaViewer {
     this.opts = o;
 
     // resolve container
-    this._root = typeof o.container === 'string'
+    this._host = typeof o.container === 'string'
       ? document.querySelector(o.container)
       : o.container;
-    if (!this._root) throw new Error('MangaViewer: container not found');
+    if (!this._host) throw new Error('MangaViewer: container not found');
+    this.shadowRoot = this._host.shadowRoot || this._host.attachShadow({ mode: 'open' });
+    this._root = this.shadowRoot;
 
     // ── Normalise pages ──
     this._rawPages = this._normalisePages(o.pages);
@@ -376,7 +1552,11 @@ export default class MangaViewer {
   // ─── DOM Construction ───
   _build() {
     const o = this.opts;
-    this._root.innerHTML = '';
+    this._root.replaceChildren();
+
+    const styleTag = el('style');
+    styleTag.textContent = MANGA_VIEWER_CSS;
+    this._root.appendChild(styleTag);
 
     // Loading screen
     this._loadingEl = el('div', { className: 'mv-loading-screen' }, [
@@ -508,9 +1688,9 @@ export default class MangaViewer {
     if (this.opts.viewMode === 'scroll') {
       this._main.classList.add('mv-scroll-mode');
       this._slotTrack.classList.add('mv-scroll-track');
-      this._tapLeft.style.display = 'none';
-      this._tapRight.style.display = 'none';
-      this._zoomControls.style.display = 'none';
+      this._tapLeft.classList.add('mv-display-none');
+      this._tapRight.classList.add('mv-display-none');
+      this._zoomControls.classList.add('mv-display-none');
     }
 
     this._buildSlots();
@@ -571,74 +1751,36 @@ export default class MangaViewer {
     const isScroll = this.opts.viewMode === 'scroll';
     const shouldReverse = !isScroll && dir === 'rtl';
     const displaySlots = shouldReverse ? [...this._slots].reverse() : this._slots;
+    this._slotTrack.replaceChildren();
 
-    let html = '';
     displaySlots.forEach((slot, displayIdx) => {
       const realIdx = shouldReverse ? this._slots.length - 1 - displayIdx : displayIdx;
-      let classes = 'mv-page-slot';
+      const classes = ['mv-page-slot'];
       if (slot.spread) {
-        classes += ' mv-spread-slot';
-        if (dir === 'rtl') classes += ' mv-rtl-slot';
+        classes.push('mv-spread-slot');
+        if (dir === 'rtl') classes.push('mv-rtl-slot');
       }
 
-      const shouldEagerLoad = realIdx <= 2;
-      const loadingAttr = shouldEagerLoad ? 'eager' : 'lazy';
+      const slotEl = el('div', { className: classes.join(' '), 'data-slot': String(realIdx) });
+      const zoomEl = el('div', { className: 'mv-zoom-container', 'data-zoom-slot': String(realIdx) });
+      slotEl.appendChild(zoomEl);
 
-      const images = slot.pages.map(pageIdx => {
-        const page = this._pages[pageIdx];
+      const pageNodes = [];
+      slot.pages.forEach(pageIdx => {
+        const shouldEagerLoad = realIdx <= 2;
+        const loadingAttr = shouldEagerLoad ? 'eager' : 'lazy';
+        pageNodes.push(this._createPageNode(pageIdx, loadingAttr));
+      });
 
-        if (page.type === 'adsense') {
-          return `<div style="width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;background:${page.backgroundColor || '#1a1a1a'};padding:20px;">
-            <div style="width:100%;max-width:100%;display:flex;justify-content:center;align-items:center;">
-              <ins class="adsbygoogle" style="display:block;min-width:300px;min-height:250px;width:100%;"
-                   data-ad-client="${escapeHtml(page.client)}"
-                   data-ad-slot="${escapeHtml(page.slot)}"
-                   data-ad-format="auto"
-                   data-full-width-responsive="true"></ins>
-            </div>
-            <div style="margin-top:20px;color:#666;font-size:12px;text-align:center;"><p>Ad</p></div>
-          </div>`;
-        }
-
-        if (page.type === 'purchase' || page.isPurchasePage) {
-          return `<div class="mv-purchase-trigger" style="width:100%;height:100%;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);"></div>`;
-        }
-
-        if (page.type === 'html') {
-          const bg = page.backgroundColor || '#000';
-          const content = page.html || '';
-          if (page.linkUrl) {
-            return `<a href="${escapeHtml(page.linkUrl)}" target="${page.linkTarget || '_blank'}" rel="noopener noreferrer" style="background:${bg};display:flex;align-items:center;justify-content:center;width:100%;height:100%;">${content}</a>`;
-          }
-          return `<div style="background:${bg};display:flex;align-items:center;justify-content:center;width:100%;height:100%;">${content}</div>`;
-        }
-
-        // Default: image
-        const src = page.src || '';
-        const bg = page.backgroundColor || '';
-        if (page.linkUrl) {
-          return `<a href="${escapeHtml(page.linkUrl)}" target="${page.linkTarget || '_blank'}" rel="noopener noreferrer" style="background:${bg};display:flex;align-items:center;justify-content:center;"><img src="${escapeHtml(src)}" alt="Page ${pageIdx + 1}" draggable="false" loading="${loadingAttr}" decoding="async" style="max-width:100%;max-height:100%;object-fit:contain;"></a>`;
-        }
-        return `<img src="${escapeHtml(src)}" alt="Page ${pageIdx + 1}" draggable="false" loading="${loadingAttr}" decoding="async">`;
-      }).join('');
-
-      // Add blank page for single-page-in-spread (cover)
-      let finalImages = images;
       if (slot.hasBlank) {
-        // Render blank as a div that mirrors the cover image size via aspect-ratio
-        const coverPage = this._pages[slot.pages[0]];
-        const blankImg = `<div class="mv-blank-page" aria-hidden="true"></div>`;
-        if (dir === 'rtl') {
-          finalImages = `${blankImg}${images}`;
-        } else {
-          finalImages = `${images}${blankImg}`;
-        }
+        const blank = el('div', { className: 'mv-blank-page', 'aria-hidden': 'true' });
+        if (dir === 'rtl') pageNodes.unshift(blank);
+        else pageNodes.push(blank);
       }
 
-      html += `<div class="${classes}" data-slot="${realIdx}"><div class="mv-zoom-container" data-zoom-slot="${realIdx}">${finalImages}</div></div>`;
+      pageNodes.forEach(node => zoomEl.appendChild(node));
+      this._slotTrack.appendChild(slotEl);
     });
-
-    this._slotTrack.innerHTML = html;
 
     // Match blank page size to adjacent cover image
     this._slotTrack.querySelectorAll('.mv-blank-page').forEach(blank => {
@@ -646,7 +1788,7 @@ export default class MangaViewer {
       if (sibling) {
         const matchSize = () => {
           if (sibling.naturalWidth && sibling.naturalHeight) {
-            blank.style.aspectRatio = `${sibling.naturalWidth} / ${sibling.naturalHeight}`;
+            blank.style.setProperty('--mv-blank-aspect-ratio', `${sibling.naturalWidth} / ${sibling.naturalHeight}`);
           }
         };
         if (sibling.complete) matchSize();
@@ -660,10 +1802,74 @@ export default class MangaViewer {
     setTimeout(() => this._initAds(), 500);
   }
 
+  _createPageNode(pageIdx, loadingAttr) {
+    const page = this._pages[pageIdx];
+
+    if (page.type === 'adsense') {
+      const wrap = el('div', { className: 'mv-adsense-page mv-page-fill mv-page-bg' });
+      wrap.style.setProperty('--mv-page-bg', page.backgroundColor || '#1a1a1a');
+
+      const inner = el('div', { className: 'mv-adsense-inner' });
+      const ad = el('ins', {
+        className: 'adsbygoogle mv-adsense-slot',
+        'data-ad-client': page.client || '',
+        'data-ad-slot': page.slot || '',
+        'data-ad-format': 'auto',
+        'data-full-width-responsive': 'true',
+      });
+      inner.appendChild(ad);
+      wrap.appendChild(inner);
+
+      const labelWrap = el('div', { className: 'mv-adsense-label' });
+      labelWrap.appendChild(el('p', {}, 'Ad'));
+      wrap.appendChild(labelWrap);
+      return wrap;
+    }
+
+    if (page.type === 'purchase' || page.isPurchasePage) {
+      return el('div', { className: 'mv-purchase-trigger mv-page-fill' });
+    }
+
+    if (page.type === 'html') {
+      const target = page.linkUrl
+        ? el('a', {
+          href: page.linkUrl,
+          target: page.linkTarget || '_blank',
+          rel: 'noopener noreferrer',
+          className: 'mv-page-fill mv-page-center mv-page-bg mv-page-link',
+        })
+        : el('div', { className: 'mv-page-fill mv-page-center mv-page-bg' });
+      target.style.setProperty('--mv-page-bg', page.backgroundColor || '#000');
+      if (page.html) target.innerHTML = page.html;
+      return target;
+    }
+
+    const src = page.src || '';
+    const img = el('img', {
+      src,
+      alt: `Page ${pageIdx + 1}`,
+      draggable: 'false',
+      loading: loadingAttr,
+      decoding: 'async',
+    });
+
+    if (!page.linkUrl) return img;
+
+    const anchor = el('a', {
+      href: page.linkUrl,
+      target: page.linkTarget || '_blank',
+      rel: 'noopener noreferrer',
+      className: 'mv-page-center mv-page-bg mv-page-link',
+    });
+    if (page.backgroundColor) anchor.style.setProperty('--mv-page-bg', page.backgroundColor);
+    anchor.appendChild(img);
+    return anchor;
+  }
+
   _initAds() {
     if (typeof window.adsbygoogle === 'undefined') return;
     try {
-      document.querySelectorAll('.adsbygoogle').forEach(ad => {
+      this.shadowRoot.querySelectorAll('.adsbygoogle').forEach(ad => {
         if (!ad.getAttribute('data-adsbygoogle-status')) {
           (window.adsbygoogle = window.adsbygoogle || []).push({});
         }
@@ -921,7 +2127,7 @@ export default class MangaViewer {
         ? this._slots.length - 1 - this._currentSlotIndex
         : this._currentSlotIndex;
       const baseOffset = -displayIndex * this._containerWidth;
-      this._slotTrack.style.transform = `translateX(${baseOffset + trackOffset}px)`;
+      this._slotTrack.style.setProperty('--mv-track-transform', `translateX(${baseOffset + trackOffset}px)`);
     } else {
       this._edgeOverscroll = 0;
     }
@@ -1204,7 +2410,7 @@ export default class MangaViewer {
       ? this._slots.length - 1 - this._currentSlotIndex
       : this._currentSlotIndex;
     const baseOffset = -displayIndex * this._containerWidth;
-    this._slotTrack.style.transform = `translateX(${baseOffset + this._offsetX}px)`;
+    this._slotTrack.style.setProperty('--mv-track-transform', `translateX(${baseOffset + this._offsetX}px)`);
   }
 
   // ─── UI Update ───
@@ -1289,7 +2495,7 @@ export default class MangaViewer {
   _updateZoomTransform(container) {
     if (!container) container = this._getCurrentZoomContainer();
     if (!container) return;
-    container.style.transform = `scale(${this._currentZoom}) translate(${this._zoomPanX / this._currentZoom}px, ${this._zoomPanY / this._currentZoom}px)`;
+    container.style.setProperty('--mv-zoom-transform', `scale(${this._currentZoom}) translate(${this._zoomPanX / this._currentZoom}px, ${this._zoomPanY / this._currentZoom}px)`);
   }
 
   _updateZoomPan(newX, newY, allowRubberBand = true) {
@@ -1361,7 +2567,10 @@ export default class MangaViewer {
   _resetZoomOnPageChange() {
     if (this._currentZoom > 1) {
       const container = this._getCurrentZoomContainer();
-      if (container) { container.classList.remove('mv-zoomed'); container.style.transform = ''; }
+      if (container) {
+        container.classList.remove('mv-zoomed');
+        container.style.removeProperty('--mv-zoom-transform');
+      }
       this._currentZoom = 1;
       this._zoomPanX = 0;
       this._zoomPanY = 0;
@@ -1812,6 +3021,6 @@ export default class MangaViewer {
         target.removeEventListener(evt, fn, opts);
       }
     }
-    this._root.innerHTML = '';
+    this._root.replaceChildren();
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Manga Viewer v0.1.0
+ * Manga Viewer v0.2.0
  * https://github.com/tokagemushi/manga-viewer
  * (c) tokagemushi — MIT License
  */
@@ -321,6 +321,7 @@ body.mv-pseudo-fullscreen-body {
   display: flex;
   width: 100%;
   height: 100%;
+  transform: var(--mv-track-transform, translateX(0px));
   transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
@@ -366,6 +367,7 @@ body.mv-pseudo-fullscreen-body {
   align-items: center;
   justify-content: center;
   transform-origin: center center;
+  transform: var(--mv-zoom-transform, scale(1) translate(0px, 0px));
   touch-action: none;
   transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
@@ -394,9 +396,67 @@ body.mv-pseudo-fullscreen-body {
 .mv-spread-slot .mv-blank-page {
   height: 100%;
   width: auto;
+  aspect-ratio: var(--mv-blank-aspect-ratio, auto);
   max-width: 50%;
   max-height: 100%;
   background: #000;
+}
+
+.mv-page-fill {
+  width: 100%;
+  height: 100%;
+}
+
+.mv-page-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mv-page-bg {
+  background: var(--mv-page-bg, transparent);
+}
+
+.mv-page-link {
+  text-decoration: none;
+}
+
+.mv-display-none {
+  display: none !important;
+}
+
+.mv-adsense-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.mv-adsense-inner {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.mv-adsense-slot {
+  display: block;
+  min-width: 300px;
+  min-height: 250px;
+  width: 100%;
+}
+
+.mv-adsense-label {
+  margin-top: 20px;
+  color: #666;
+  font-size: 12px;
+  text-align: center;
+}
+
+.mv-purchase-trigger {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
 }
 
 /* ===== Spread Mode ===== */
