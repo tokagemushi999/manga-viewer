@@ -4,8 +4,10 @@
   "description": "A standalone, feature-rich manga and comic viewer for the web. RTL/LTR, pinch zoom, inertia, spread mode, swipe, keyboard navigation, and more.",
   "main": "src/manga-viewer.js",
   "module": "src/manga-viewer.js",
+  "types": "index.d.ts",
   "type": "module",
   "files": [
+    "index.d.ts",
     "src/",
     "dist/",
     "LICENSE",

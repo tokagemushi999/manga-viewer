@@ -25,6 +25,7 @@ const ICONS = {
   play:         '<svg viewBox="0 0 384 512" width="14" height="14" fill="currentColor"><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.8 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>',
 };
 
+// CSS is duplicated in manga-viewer.css for external use. Keep in sync or use build step.
 const MANGA_VIEWER_CSS = String.raw`/**
  * Manga Viewer v0.2.0
  * https://github.com/tokagemushi/manga-viewer
@@ -87,6 +88,7 @@ const MANGA_VIEWER_CSS = String.raw`/**
 .mv-container {
   position: fixed;
   inset: 0;
+  height: 100vh;
   height: 100dvh;
   background: #000;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -1219,6 +1221,7 @@ function _svgIcon(svgString) {
   return document.importNode(svg, true);
 }
 
+/** Create an element with attributes/listeners and append children. */
 function el(tag, attrs = {}, children = []) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -1538,6 +1541,7 @@ export default class MangaViewer {
 
     // Wheel cooldown
     this._wheelCooldownUntil = 0;
+    this._resizeRaf = null;
 
     // Bound handlers (for cleanup)
     this._bound = {};
@@ -1590,9 +1594,9 @@ export default class MangaViewer {
     this._main.appendChild(this._slotTrack);
 
     // Tap areas (page mode only)
-    this._tapLeft = el('div', { className: 'mv-tap-area mv-left' });
+    this._tapLeft = el('div', { className: 'mv-tap-area mv-left', role: 'button', 'aria-label': 'Previous page' });
     this._tapCenter = el('div', { className: 'mv-tap-area mv-center' });
-    this._tapRight = el('div', { className: 'mv-tap-area mv-right' });
+    this._tapRight = el('div', { className: 'mv-tap-area mv-right', role: 'button', 'aria-label': 'Next page' });
     this._main.appendChild(this._tapLeft);
     this._main.appendChild(this._tapCenter);
     this._main.appendChild(this._tapRight);
@@ -1676,6 +1680,8 @@ export default class MangaViewer {
       min: '1',
       max: String(this._totalPages),
       value: '1',
+      role: 'slider',
+      'aria-label': 'Page slider',
     });
     footer.appendChild(this._slider);
 
@@ -1869,6 +1875,7 @@ export default class MangaViewer {
   }
 
   _initAds() {
+    // Warning: AdSense may not work inside Shadow DOM. Consider using slots for ad placement.
     if (typeof window.adsbygoogle === 'undefined') return;
     try {
       this.shadowRoot.querySelectorAll('.adsbygoogle').forEach(ad => {
@@ -1983,10 +1990,14 @@ export default class MangaViewer {
   }
 
   _onResize() {
-    this._containerWidth = this._main.offsetWidth;
-    this._isMobile = window.matchMedia('(max-width: 768px)').matches;
-    this._checkOrientation();
-    this._updateTrackPosition(false);
+    if (this._resizeRaf !== null) return;
+    this._resizeRaf = requestAnimationFrame(() => {
+      this._resizeRaf = null;
+      this._containerWidth = this._main.offsetWidth;
+      this._isMobile = window.matchMedia('(max-width: 768px)').matches;
+      this._checkOrientation();
+      this._updateTrackPosition(false);
+    });
   }
 
   // ─── Touch handlers ───
@@ -2792,8 +2803,11 @@ export default class MangaViewer {
       className: 'mv-resume-btn mv-primary',
       onClick: () => { overlay.remove(); setTimeout(() => this.goToSlot(this._findSlotByPageIndex(saved.pageIndex)), 100); },
     });
-    resumeBtn.appendChild(_svgIcon(ICONS.play));
-    resumeBtn.appendChild(document.createTextNode(' Resume'));
+    const resumeIcon = _svgIcon(ICONS.play);
+    const resumeText = document.createElement('span');
+    resumeText.textContent = ' Resume';
+    resumeBtn.appendChild(resumeIcon);
+    resumeBtn.appendChild(resumeText);
     btns.appendChild(resumeBtn);
 
     card.appendChild(btns);
@@ -2830,6 +2844,7 @@ export default class MangaViewer {
   }
 
   _setPseudoFullscreenBodyLock(locked) {
+    // Note: This modifies host document body for pseudo-fullscreen. May affect other components.
     const doc = this._host?.ownerDocument || document;
     const body = doc.body;
     if (!body) return;
@@ -2864,11 +2879,21 @@ export default class MangaViewer {
 
   _copyLink() {
     const url = this.opts.shareUrl || window.location.href;
-    navigator.clipboard.writeText(url).then(() => this._showToast('Link copied!')).catch(() => {
-      const ta = document.createElement('textarea');
-      ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-      this._showToast('Link copied!');
-    });
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      navigator.clipboard.writeText(url).then(() => this._showToast('Link copied!')).catch(() => this._showToast('Failed to copy link'));
+      return;
+    }
+    this._copyLinkFallback(url);
+  }
+
+  _copyLinkFallback(url) {
+    const ta = document.createElement('textarea');
+    ta.value = url;
+    this.shadowRoot.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    this._showToast('Link copied!');
   }
 
   // ─── Toast ───
@@ -2919,7 +2944,7 @@ export default class MangaViewer {
       );
     }
 
-    const overlay = el('div', { className: 'mv-help-overlay' });
+    const overlay = el('div', { className: 'mv-help-overlay', role: 'dialog', 'aria-modal': 'true' });
     overlay.addEventListener('click', () => overlay.remove());
 
     const card = el('div', { className: 'mv-help-card' });
@@ -2929,7 +2954,7 @@ export default class MangaViewer {
     const title = el('div', { className: 'mv-help-title' });
     title.appendChild(_svgIcon(ICONS.questionCircle));
     title.appendChild(document.createTextNode(' Help'));
-    const closeBtn = el('button', { className: 'mv-help-close', type: 'button' }, _svgIcon(ICONS.times));
+    const closeBtn = el('button', { className: 'mv-help-close', type: 'button', 'aria-label': 'Close' }, _svgIcon(ICONS.times));
     closeBtn.addEventListener('click', () => overlay.remove());
     header.appendChild(title);
     header.appendChild(closeBtn);
@@ -2994,13 +3019,13 @@ export default class MangaViewer {
   }
 
   _buildBookmarkPanel() {
-    this._bookmarkPanel = el('div', { className: 'mv-bookmark-panel' });
+    this._bookmarkPanel = el('div', { className: 'mv-bookmark-panel', role: 'dialog' });
     this._bookmarkOverlay = el('div', { className: 'mv-bookmark-overlay', onClick: () => this._toggleBookmarkPanel() });
 
     // Header
     const header = el('div', { className: 'mv-bookmark-panel-header' });
     header.appendChild(el('span', { className: 'mv-bookmark-panel-title' }, 'しおり'));
-    header.appendChild(el('button', { className: 'mv-bookmark-panel-close', onClick: () => this._toggleBookmarkPanel() }, _svgIcon(ICONS.times)));
+    header.appendChild(el('button', { className: 'mv-bookmark-panel-close', onClick: () => this._toggleBookmarkPanel(), 'aria-label': 'Close' }, _svgIcon(ICONS.times)));
     this._bookmarkPanel.appendChild(header);
 
     // Add/remove button for current page
@@ -3111,6 +3136,10 @@ export default class MangaViewer {
   destroy() {
     this._stopMomentum();
     this._setPseudoFullscreenBodyLock(false);
+    if (this._resizeRaf !== null) {
+      cancelAnimationFrame(this._resizeRaf);
+      this._resizeRaf = null;
+    }
     clearTimeout(this._bmTimer);
     this._bmTimer = null;
     if (this._bound._list) {
