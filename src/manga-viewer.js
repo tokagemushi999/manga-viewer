@@ -115,10 +115,6 @@ const MANGA_VIEWER_CSS = String.raw`/**
   z-index: 9999;
 }
 
-body.mv-pseudo-fullscreen-body {
-  overflow: hidden;
-}
-
 /* ===== Status Bar Cover (mobile notch) ===== */
 .mv-status-bar-cover {
   position: fixed;
@@ -1208,6 +1204,21 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function _svgIcon(svgString) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgString, 'image/svg+xml');
+  if (doc.querySelector('parsererror')) return document.createDocumentFragment();
+  const svg = doc.documentElement;
+  if (!svg || svg.nodeName.toLowerCase() !== 'svg') return document.createDocumentFragment();
+  svg.querySelectorAll('script').forEach((node) => node.remove());
+  [svg, ...svg.querySelectorAll('*')].forEach((node) => {
+    for (const attr of Array.from(node.attributes)) {
+      if (/^on/i.test(attr.name)) node.removeAttribute(attr.name);
+    }
+  });
+  return document.importNode(svg, true);
+}
+
 function el(tag, attrs = {}, children = []) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -1217,8 +1228,6 @@ function el(tag, attrs = {}, children = []) {
       e.className = v;
     } else if (k.startsWith('on') && typeof v === 'function') {
       e.addEventListener(k.slice(2).toLowerCase(), v);
-    } else if (k === 'innerHTML') {
-      e.innerHTML = v;
     } else {
       e.setAttribute(k, v);
     }
@@ -1420,6 +1429,7 @@ export default class MangaViewer {
       ? document.querySelector(o.container)
       : o.container;
     if (!this._host) throw new Error('MangaViewer: container not found');
+    this._host.setAttribute('tabindex', '0');
     this.shadowRoot = this._host.shadowRoot || this._host.attachShadow({ mode: 'open' });
     this._root = this.shadowRoot;
 
@@ -1535,10 +1545,13 @@ export default class MangaViewer {
     // Bookmark manager
     this._bookmarkMgr = null;
     this._bookmarkPanelOpen = false;
+    this._bmLongPress = false;
+    this._bmTimer = null;
 
     // Build DOM & init
     this._build();
     this._init();
+    requestAnimationFrame(() => this._focusHost());
   }
 
   // ─── Page normalisation ───
@@ -1598,8 +1611,8 @@ export default class MangaViewer {
 
     // Zoom controls
     this._zoomControls = el('div', { className: 'mv-zoom-controls' });
-    this._zoomInBtn = el('button', { className: 'mv-zoom-btn', title: 'Zoom in', innerHTML: ICONS.searchPlus, onClick: () => this.zoomIn() });
-    this._zoomResetBtn = el('button', { className: 'mv-zoom-btn', title: 'Reset zoom', innerHTML: ICONS.compressAlt, disabled: 'disabled', onClick: () => this.resetZoom() });
+    this._zoomInBtn = el('button', { className: 'mv-zoom-btn', title: 'Zoom in', onClick: () => this.zoomIn() }, _svgIcon(ICONS.searchPlus));
+    this._zoomResetBtn = el('button', { className: 'mv-zoom-btn', title: 'Reset zoom', disabled: 'disabled', onClick: () => this.resetZoom() }, _svgIcon(ICONS.compressAlt));
     this._zoomControls.appendChild(this._zoomInBtn);
     this._zoomControls.appendChild(this._zoomResetBtn);
     this._container.appendChild(this._zoomControls);
@@ -1613,7 +1626,7 @@ export default class MangaViewer {
     const header = el('div', { className: 'mv-header' });
 
     // Back button
-    const backBtn = el('a', { href: o.backUrl, className: 'mv-header-btn', title: 'Back', innerHTML: ICONS.chevronLeft });
+    const backBtn = el('a', { href: o.backUrl, className: 'mv-header-btn', title: 'Back' }, _svgIcon(ICONS.chevronLeft));
     header.appendChild(backBtn);
 
     // Title
@@ -1624,32 +1637,21 @@ export default class MangaViewer {
     const btns = el('div', { className: 'mv-header-buttons' });
 
     // Bookmark
-    this._bookmarkBtn = el('button', { className: 'mv-header-btn mv-bookmark-btn', title: 'Bookmarks', innerHTML: ICONS.bookmark });
-    // Single click = toggle bookmark on current page, long press = open panel
-    let _bmLongPress = false, _bmTimer = null;
-    this._bookmarkBtn.addEventListener('pointerdown', () => {
-      _bmLongPress = false;
-      _bmTimer = setTimeout(() => { _bmLongPress = true; this._toggleBookmarkPanel(); }, 500);
-    });
-    this._bookmarkBtn.addEventListener('pointerup', () => {
-      clearTimeout(_bmTimer);
-      if (!_bmLongPress) this._quickToggleBookmark();
-    });
-    this._bookmarkBtn.addEventListener('pointerleave', () => clearTimeout(_bmTimer));
+    this._bookmarkBtn = el('button', { className: 'mv-header-btn mv-bookmark-btn', title: 'Bookmarks' }, _svgIcon(ICONS.bookmark));
     if (this.opts.bookmarks) btns.appendChild(this._bookmarkBtn);
 
     // Fullscreen (PC only)
-    this._fullscreenBtn = el('button', { className: 'mv-header-btn mv-pc-only', title: 'Fullscreen', innerHTML: ICONS.expand, onClick: () => this._toggleFullscreen() });
+    this._fullscreenBtn = el('button', { className: 'mv-header-btn mv-pc-only', title: 'Fullscreen', onClick: () => this._toggleFullscreen() }, _svgIcon(ICONS.expand));
     btns.appendChild(this._fullscreenBtn);
 
     // Share to X
-    btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Share on X', innerHTML: ICONS.xLogo, onClick: () => this._shareToX() }));
+    btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Share on X', onClick: () => this._shareToX() }, _svgIcon(ICONS.xLogo)));
 
     // Copy link
-    btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Copy link', innerHTML: ICONS.link, onClick: () => this._copyLink() }));
+    btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Copy link', onClick: () => this._copyLink() }, _svgIcon(ICONS.link)));
 
     // Help
-    btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Help', innerHTML: ICONS.question, onClick: () => this._showHelp() }));
+    btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Help', onClick: () => this._showHelp() }, _svgIcon(ICONS.question)));
 
     header.appendChild(btns);
     return header;
@@ -1840,7 +1842,7 @@ export default class MangaViewer {
         })
         : el('div', { className: 'mv-page-fill mv-page-center mv-page-bg' });
       target.style.setProperty('--mv-page-bg', page.backgroundColor || '#000');
-      if (page.html) target.innerHTML = page.html;
+      if (page.html) target.appendChild(this._sanitizeHtml(page.html));
       return target;
     }
 
@@ -1935,7 +1937,8 @@ export default class MangaViewer {
     }
 
     bind(this._tapCenter, 'click', this._onTapCenter);
-    bind(document, 'keydown', this._onKeyDown);
+    bind(this._host, 'click', () => this._focusHost());
+    bind(this._host, 'keydown', this._onKeyDown);
     bind(this._main, 'wheel', this._onWheel, { passive: false });
     bind(this._slider, 'input', this._onSliderInput);
     bind(window, 'resize', this._onResize);
@@ -1945,6 +1948,38 @@ export default class MangaViewer {
     bind(window, 'pagehide', () => this._saveProgress());
     bind(document, 'fullscreenchange', () => this._updateFullscreenIcon());
     bind(document, 'webkitfullscreenchange', () => this._updateFullscreenIcon());
+    bind(this._bookmarkBtn, 'pointerdown', this._onBookmarkPointerDown);
+    bind(this._bookmarkBtn, 'pointerup', this._onBookmarkPointerUp);
+    bind(this._bookmarkBtn, 'pointerleave', this._onBookmarkPointerLeave);
+  }
+
+  _onBookmarkPointerDown() {
+    this._bmLongPress = false;
+    clearTimeout(this._bmTimer);
+    this._bmTimer = setTimeout(() => {
+      this._bmLongPress = true;
+      this._toggleBookmarkPanel();
+    }, 500);
+  }
+
+  _onBookmarkPointerUp() {
+    clearTimeout(this._bmTimer);
+    this._bmTimer = null;
+    if (!this._bmLongPress) this._toggleCurrentPageBookmark();
+  }
+
+  _onBookmarkPointerLeave() {
+    clearTimeout(this._bmTimer);
+    this._bmTimer = null;
+  }
+
+  _focusHost() {
+    if (!this._host || typeof this._host.focus !== 'function') return;
+    try {
+      this._host.focus({ preventScroll: true });
+    } catch (_) {
+      this._host.focus();
+    }
   }
 
   _onResize() {
@@ -2746,14 +2781,20 @@ export default class MangaViewer {
     const overlay = el('div', { className: 'mv-resume-dialog' });
     const card = el('div', { className: 'mv-resume-card' });
 
-    const icon = el('div', { className: 'mv-resume-icon', innerHTML: '<svg viewBox="0 0 384 512" width="28" height="28" fill="#fff"><path d="M0 48V487.7C0 501.1 10.9 512 24.3 512c5 0 9.9-1.5 14-4.4L192 400 345.7 507.6c4.1 2.9 9 4.4 14 4.4 13.4 0 24.3-10.9 24.3-24.3V48c0-26.5-21.5-48-48-48H48C21.5 0 0 21.5 0 48z"/></svg>' });
+    const icon = el('div', { className: 'mv-resume-icon' }, _svgIcon('<svg viewBox="0 0 384 512" width="28" height="28" fill="#fff"><path d="M0 48V487.7C0 501.1 10.9 512 24.3 512c5 0 9.9-1.5 14-4.4L192 400 345.7 507.6c4.1 2.9 9 4.4 14 4.4 13.4 0 24.3-10.9 24.3-24.3V48c0-26.5-21.5-48-48-48H48C21.5 0 0 21.5 0 48z"/></svg>'));
     card.appendChild(icon);
     card.appendChild(el('div', { className: 'mv-resume-title' }, 'Resume reading?'));
     card.appendChild(el('div', { className: 'mv-resume-subtitle' }, `Continue from page ${pageNum}`));
 
     const btns = el('div', { className: 'mv-resume-buttons' });
     btns.appendChild(el('button', { className: 'mv-resume-btn mv-secondary', onClick: () => { overlay.remove(); try { localStorage.removeItem(this.opts.storageKey); } catch (_) {} } }, 'Start over'));
-    btns.appendChild(el('button', { className: 'mv-resume-btn mv-primary', innerHTML: ICONS.play + ' Resume', onClick: () => { overlay.remove(); setTimeout(() => this.goToSlot(this._findSlotByPageIndex(saved.pageIndex)), 100); } }));
+    const resumeBtn = el('button', {
+      className: 'mv-resume-btn mv-primary',
+      onClick: () => { overlay.remove(); setTimeout(() => this.goToSlot(this._findSlotByPageIndex(saved.pageIndex)), 100); },
+    });
+    resumeBtn.appendChild(_svgIcon(ICONS.play));
+    resumeBtn.appendChild(document.createTextNode(' Resume'));
+    btns.appendChild(resumeBtn);
 
     card.appendChild(btns);
     overlay.appendChild(card);
@@ -2766,8 +2807,8 @@ export default class MangaViewer {
     const isReal = !!(document.fullscreenElement || document.webkitFullscreenElement);
     const isPseudo = viewer.classList.contains('mv-pseudo-fullscreen');
 
-    const enterPseudo = () => { viewer.classList.add('mv-pseudo-fullscreen'); document.body.classList.add('mv-pseudo-fullscreen-body'); };
-    const exitPseudo = () => { viewer.classList.remove('mv-pseudo-fullscreen'); document.body.classList.remove('mv-pseudo-fullscreen-body'); };
+    const enterPseudo = () => { viewer.classList.add('mv-pseudo-fullscreen'); this._setPseudoFullscreenBodyLock(true); };
+    const exitPseudo = () => { viewer.classList.remove('mv-pseudo-fullscreen'); this._setPseudoFullscreenBodyLock(false); };
 
     if (isReal || isPseudo) {
       if (isReal) try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (_) {}
@@ -2788,9 +2829,30 @@ export default class MangaViewer {
     this._updateFullscreenIcon();
   }
 
+  _setPseudoFullscreenBodyLock(locked) {
+    const doc = this._host?.ownerDocument || document;
+    const body = doc.body;
+    if (!body) return;
+    if (locked) {
+      if (!this._pseudoFullscreenBodyStyle || !this._pseudoFullscreenBodyStyle.isConnected) {
+        const st = doc.createElement('style');
+        st.textContent = 'body.mv-pseudo-fullscreen-body { overflow: hidden; }';
+        (doc.head || doc.documentElement).appendChild(st);
+        this._pseudoFullscreenBodyStyle = st;
+      }
+      body.classList.add('mv-pseudo-fullscreen-body');
+      return;
+    }
+    body.classList.remove('mv-pseudo-fullscreen-body');
+    if (this._pseudoFullscreenBodyStyle) {
+      this._pseudoFullscreenBodyStyle.remove();
+      this._pseudoFullscreenBodyStyle = null;
+    }
+  }
+
   _updateFullscreenIcon() {
     const on = !!(document.fullscreenElement || document.webkitFullscreenElement) || this._container.classList.contains('mv-pseudo-fullscreen');
-    if (this._fullscreenBtn) this._fullscreenBtn.innerHTML = on ? ICONS.compress : ICONS.expand;
+    if (this._fullscreenBtn) this._fullscreenBtn.replaceChildren(_svgIcon(on ? ICONS.compress : ICONS.expand));
   }
 
   // ─── Share / Copy ───
@@ -2813,7 +2875,9 @@ export default class MangaViewer {
   _showToast(message) {
     const existing = this._root.querySelector('.mv-toast');
     if (existing) existing.remove();
-    const toast = el('div', { className: 'mv-toast', innerHTML: ICONS.check + ' ' + escapeHtml(message) });
+    const toast = el('div', { className: 'mv-toast' });
+    toast.appendChild(_svgIcon(ICONS.check));
+    toast.appendChild(document.createTextNode(` ${message}`));
     this._root.appendChild(toast);
     setTimeout(() => { toast.classList.add('mv-fade-out'); setTimeout(() => toast.remove(), 300); }, 2000);
   }
@@ -2827,38 +2891,63 @@ export default class MangaViewer {
     const isMob = this._isMobile;
     const isPage = this.opts.viewMode !== 'scroll';
 
-    let controls = '';
+    const makeHelpItem = (icon, label, desc) => {
+      const item = el('div', { className: 'mv-help-item' });
+      item.appendChild(el('div', { className: 'mv-help-item-icon' }, icon));
+      const text = el('div', { className: 'mv-help-item-text' });
+      text.appendChild(el('div', { className: 'mv-help-item-label' }, label));
+      text.appendChild(el('div', { className: 'mv-help-item-desc' }, desc));
+      item.appendChild(text);
+      return item;
+    };
+
+    const controls = [];
     if (!isPage) {
-      controls = `<div class="mv-help-item"><div class="mv-help-item-icon">↕</div><div class="mv-help-item-text"><div class="mv-help-item-label">${isMob ? 'Swipe' : 'Scroll'}</div><div class="mv-help-item-desc">${isMob ? 'Swipe' : 'Scroll'} up/down to read</div></div></div>`;
+      const action = isMob ? 'Swipe' : 'Scroll';
+      controls.push(makeHelpItem('↕', action, `${action} up/down to read`));
     } else if (isMob) {
-      controls = `
-        <div class="mv-help-item"><div class="mv-help-item-icon">👆</div><div class="mv-help-item-text"><div class="mv-help-item-label">Tap</div><div class="mv-help-item-desc">Left: ${isRtl ? 'next' : 'prev'} page / Right: ${isRtl ? 'prev' : 'next'} page / Center: toggle menu</div></div></div>
-        <div class="mv-help-item"><div class="mv-help-item-icon">👋</div><div class="mv-help-item-text"><div class="mv-help-item-label">Swipe</div><div class="mv-help-item-desc">Swipe left/right to turn pages</div></div></div>
-        <div class="mv-help-item"><div class="mv-help-item-icon">🔍</div><div class="mv-help-item-text"><div class="mv-help-item-label">Pinch</div><div class="mv-help-item-desc">Pinch to zoom, drag to pan. Drag to edge to turn page.</div></div></div>`;
+      controls.push(
+        makeHelpItem('👆', 'Tap', `Left: ${isRtl ? 'next' : 'prev'} page / Right: ${isRtl ? 'prev' : 'next'} page / Center: toggle menu`),
+        makeHelpItem('👋', 'Swipe', 'Swipe left/right to turn pages'),
+        makeHelpItem('🔍', 'Pinch', 'Pinch to zoom, drag to pan. Drag to edge to turn page.')
+      );
     } else {
-      controls = `
-        <div class="mv-help-item"><div class="mv-help-item-icon">🖱</div><div class="mv-help-item-text"><div class="mv-help-item-label">Click</div><div class="mv-help-item-desc">Left: ${isRtl ? 'next' : 'prev'} / Right: ${isRtl ? 'prev' : 'next'} / Center: menu</div></div></div>
-        <div class="mv-help-item"><div class="mv-help-item-icon">⌨</div><div class="mv-help-item-text"><div class="mv-help-item-label">Keyboard</div><div class="mv-help-item-desc">← → : page turn / Space: next / Esc: reset zoom</div></div></div>
-        <div class="mv-help-item"><div class="mv-help-item-icon">🔍</div><div class="mv-help-item-text"><div class="mv-help-item-label">Zoom</div><div class="mv-help-item-desc">Use buttons or double-click center to zoom</div></div></div>`;
+      controls.push(
+        makeHelpItem('🖱', 'Click', `Left: ${isRtl ? 'next' : 'prev'} / Right: ${isRtl ? 'prev' : 'next'} / Center: menu`),
+        makeHelpItem('⌨', 'Keyboard', '← → : page turn / Space: next / Esc: reset zoom'),
+        makeHelpItem('🔍', 'Zoom', 'Use buttons or double-click center to zoom')
+      );
     }
 
-    const overlay = el('div', { className: 'mv-help-overlay', onClick: function() { this.remove(); } });
-    overlay.innerHTML = `<div class="mv-help-card" onclick="event.stopPropagation()">
-      <div class="mv-help-header">
-        <div class="mv-help-title">${ICONS.questionCircle} Help</div>
-        <button class="mv-help-close" onclick="this.closest('.mv-help-overlay').remove()">${ICONS.times}</button>
-      </div>
-      <div class="mv-help-content">
-        <div class="mv-help-section">
-          <div class="mv-help-section-title">⚙ Settings</div>
-          <div class="mv-help-item"><div class="mv-help-item-icon">📖</div><div class="mv-help-item-text"><div class="mv-help-item-label">${mode}</div><div class="mv-help-item-desc">${isPage ? 'Direction: ' + dirLabel : ''}</div></div></div>
-        </div>
-        <div class="mv-help-section">
-          <div class="mv-help-section-title">👆 Controls</div>
-          ${controls}
-        </div>
-      </div>
-    </div>`;
+    const overlay = el('div', { className: 'mv-help-overlay' });
+    overlay.addEventListener('click', () => overlay.remove());
+
+    const card = el('div', { className: 'mv-help-card' });
+    card.addEventListener('click', (e) => e.stopPropagation());
+
+    const header = el('div', { className: 'mv-help-header' });
+    const title = el('div', { className: 'mv-help-title' });
+    title.appendChild(_svgIcon(ICONS.questionCircle));
+    title.appendChild(document.createTextNode(' Help'));
+    const closeBtn = el('button', { className: 'mv-help-close', type: 'button' }, _svgIcon(ICONS.times));
+    closeBtn.addEventListener('click', () => overlay.remove());
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    const content = el('div', { className: 'mv-help-content' });
+    const settingsSection = el('div', { className: 'mv-help-section' });
+    settingsSection.appendChild(el('div', { className: 'mv-help-section-title' }, '⚙ Settings'));
+    settingsSection.appendChild(makeHelpItem('📖', mode, isPage ? `Direction: ${dirLabel}` : ''));
+
+    const controlsSection = el('div', { className: 'mv-help-section' });
+    controlsSection.appendChild(el('div', { className: 'mv-help-section-title' }, '👆 Controls'));
+    controls.forEach((item) => controlsSection.appendChild(item));
+
+    content.appendChild(settingsSection);
+    content.appendChild(controlsSection);
+    card.appendChild(header);
+    card.appendChild(content);
+    overlay.appendChild(card);
     this._root.appendChild(overlay);
   }
 
@@ -2866,15 +2955,23 @@ export default class MangaViewer {
   _showPurchasePopup() {
     if (this._root.querySelector('.mv-purchase-popup')) return;
     const o = this.opts;
+    let purchaseUrl = o.purchaseUrl || '';
+    if (!/^https?:\/\//.test(purchaseUrl)) purchaseUrl = '#';
     const popup = el('div', { className: 'mv-purchase-popup' });
-    popup.innerHTML = `<div class="mv-purchase-card">
-      <div class="mv-purchase-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
-      <div class="mv-purchase-title">Preview ends here</div>
-      <p class="mv-purchase-desc">${this._totalOriginalPages} pages total — ${o.previewLimit} free</p>
-      <p class="mv-purchase-desc">Purchase to continue reading</p>
-      ${o.purchaseUrl ? `<a href="${escapeHtml(o.purchaseUrl)}" class="mv-purchase-btn">Purchase ${o.purchasePrice ? escapeHtml(o.purchasePrice) : ''}</a>` : ''}
-      ${o.backUrl ? `<a href="${escapeHtml(o.backUrl)}" class="mv-purchase-back">Go back</a>` : ''}
-    </div>`;
+    const card = el('div', { className: 'mv-purchase-card' });
+    card.appendChild(
+      el('div', { className: 'mv-purchase-icon' }, _svgIcon('<svg width="36" height="36" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>'))
+    );
+    card.appendChild(el('div', { className: 'mv-purchase-title' }, 'Preview ends here'));
+    card.appendChild(el('p', { className: 'mv-purchase-desc' }, `${this._totalOriginalPages} pages total — ${o.previewLimit} free`));
+    card.appendChild(el('p', { className: 'mv-purchase-desc' }, 'Purchase to continue reading'));
+    if (o.purchaseUrl) {
+      const purchaseBtn = el('a', { href: purchaseUrl, className: 'mv-purchase-btn' }, 'Purchase');
+      if (o.purchasePrice) purchaseBtn.appendChild(document.createTextNode(` ${o.purchasePrice}`));
+      card.appendChild(purchaseBtn);
+    }
+    if (o.backUrl) card.appendChild(el('a', { href: o.backUrl, className: 'mv-purchase-back' }, 'Go back'));
+    popup.appendChild(card);
     this._root.appendChild(popup);
   }
 
@@ -2903,7 +3000,7 @@ export default class MangaViewer {
     // Header
     const header = el('div', { className: 'mv-bookmark-panel-header' });
     header.appendChild(el('span', { className: 'mv-bookmark-panel-title' }, 'しおり'));
-    header.appendChild(el('button', { className: 'mv-bookmark-panel-close', innerHTML: ICONS.times, onClick: () => this._toggleBookmarkPanel() }));
+    header.appendChild(el('button', { className: 'mv-bookmark-panel-close', onClick: () => this._toggleBookmarkPanel() }, _svgIcon(ICONS.times)));
     this._bookmarkPanel.appendChild(header);
 
     // Add/remove button for current page
@@ -2933,10 +3030,10 @@ export default class MangaViewer {
 
     // Update toggle button
     const hasCurrent = this._bookmarkMgr.has(currentPage);
-    this._bookmarkToggleBtn.textContent = '';
-    this._bookmarkToggleBtn.innerHTML = hasCurrent
-      ? ICONS.bookmark + ' しおりを削除'
-      : ICONS.bookmark + ' 現在のページをブックマーク';
+    this._bookmarkToggleBtn.replaceChildren(
+      _svgIcon(ICONS.bookmark),
+      document.createTextNode(hasCurrent ? ' しおりを削除' : ' 現在のページをブックマーク'),
+    );
     this._bookmarkToggleBtn.classList.toggle('mv-bookmark-remove', hasCurrent);
 
     // List
@@ -2954,34 +3051,31 @@ export default class MangaViewer {
       info.appendChild(el('span', { className: 'mv-bookmark-item-page' }, `${bm.page_number}ページ`));
       info.appendChild(el('span', { className: 'mv-bookmark-item-title' }, bm.title || `ページ${bm.page_number}`));
       item.appendChild(info);
-      const delBtn = el('button', { className: 'mv-bookmark-item-delete', innerHTML: ICONS.times, onClick: (e) => {
+      const delBtn = el('button', { className: 'mv-bookmark-item-delete', onClick: (e) => {
         e.stopPropagation();
         this._bookmarkMgr.remove(bm.page_number).then(() => {
           this._renderBookmarkList();
           this._updateBookmarkBtn();
         });
-      }});
+      }}, _svgIcon(ICONS.times));
       item.appendChild(delBtn);
       this._bookmarkList.appendChild(item);
     });
   }
 
-  async _toggleCurrentPageBookmark() {
-    if (!this._bookmarkMgr) return;
-    const currentPage = this._getCurrentPageIndex() + 1;
-    if (this._bookmarkMgr.has(currentPage)) {
-      await this._bookmarkMgr.remove(currentPage);
-      this._showToast('しおりを削除しました');
-    } else {
-      const result = await this._bookmarkMgr.add(currentPage);
-      if (result.success) this._showToast('しおりを追加しました');
-      else this._showToast(result.error || 'エラーが発生しました');
-    }
-    this._renderBookmarkList();
-    this._updateBookmarkBtn();
+  _sanitizeHtml(html) {
+    const template = document.createElement('template');
+    template.innerHTML = String(html || '');
+    template.content.querySelectorAll('script').forEach((node) => node.remove());
+    template.content.querySelectorAll('*').forEach((node) => {
+      for (const attr of Array.from(node.attributes)) {
+        if (/^on/i.test(attr.name)) node.removeAttribute(attr.name);
+      }
+    });
+    return template.content.cloneNode(true);
   }
 
-  async _quickToggleBookmark() {
+  async _toggleCurrentPageBookmark() {
     if (!this._bookmarkMgr) return;
     const currentPage = this._getCurrentPageIndex() + 1;
     if (this._bookmarkMgr.has(currentPage)) {
@@ -3016,6 +3110,9 @@ export default class MangaViewer {
   /** Destroy viewer and clean up */
   destroy() {
     this._stopMomentum();
+    this._setPseudoFullscreenBodyLock(false);
+    clearTimeout(this._bmTimer);
+    this._bmTimer = null;
     if (this._bound._list) {
       for (const [target, evt, fn, opts] of this._bound._list) {
         target.removeEventListener(evt, fn, opts);
