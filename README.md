@@ -153,6 +153,96 @@ Override any class in your own stylesheet. Key classes:
 
 ---
 
+## 📱 Use in iOS / Android Apps
+
+Manga Viewer works inside **WKWebView** (iOS) and **WebView** (Android), so you can embed it in native apps.
+
+### Swift (WKWebView)
+
+```swift
+import WebKit
+
+class MangaViewController: UIViewController, WKNavigationDelegate {
+    var webView: WKWebView!
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+
+        webView = WKWebView(frame: view.bounds, configuration: config)
+        webView.navigationDelegate = self
+        webView.scrollView.isScrollEnabled = false // viewer handles its own scroll
+        view.addSubview(webView)
+
+        // Load from local bundle
+        if let url = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "manga-viewer") {
+            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        }
+
+        // Or load from CDN / your server
+        // webView.load(URLRequest(url: URL(string: "https://your-site.com/reader.html")!))
+    }
+}
+```
+
+### Minimal `reader.html` for the WebView
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="stylesheet" href="manga-viewer.css">
+  <style>html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }</style>
+</head>
+<body>
+  <div id="viewer"></div>
+  <script type="module">
+    import MangaViewer from './manga-viewer.js';
+    new MangaViewer({
+      container: '#viewer',
+      pages: ['pages/001.jpg', 'pages/002.jpg', 'pages/003.jpg'],
+      direction: 'rtl',
+      title: 'My Manga',
+    });
+  </script>
+</body>
+</html>
+```
+
+### React Native
+
+```jsx
+import { WebView } from 'react-native-webview';
+
+export default function MangaScreen() {
+  return (
+    <WebView
+      source={{ uri: 'https://your-site.com/reader.html' }}
+      // or source={require('./assets/reader.html')} for local
+      javaScriptEnabled={true}
+      scrollEnabled={false}
+      style={{ flex: 1 }}
+    />
+  );
+}
+```
+
+### Capacitor / Cordova
+
+Just `npm install @tokagemushi/manga-viewer` and use it in your web layer — it runs natively inside the Capacitor WebView with no extra config.
+
+### Tips
+
+- Set `scrollEnabled = false` on the WebView — the viewer handles its own touch gestures
+- Use `viewport-fit=cover` for full safe-area coverage on notched devices
+- To pass page data from native → WebView, use `evaluateJavaScript` (Swift) or `postMessage` (React Native)
+
+---
+
 ## 🖥 Browser Support
 
 | Browser | Support |
