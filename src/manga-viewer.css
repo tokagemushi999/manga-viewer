@@ -1,6 +1,6 @@
 /**
- * Manga Viewer v0.2.0
- * https://github.com/tokagemushi/manga-viewer
+ * Manga Viewer v0.3.0
+ * https://github.com/tokagemushi999/manga-viewer
  * (c) tokagemushi — MIT License
  */
 
@@ -54,6 +54,19 @@
 
 @keyframes mv-spin {
   to { transform: rotate(360deg); }
+}
+
+/* Visually-hidden for screen reader announcements */
+.mv-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ===== Container ===== */

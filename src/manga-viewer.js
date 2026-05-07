@@ -1,8 +1,8 @@
 /**
- * Manga Viewer v0.2.0
+ * Manga Viewer v0.3.0
  * A standalone, feature-rich manga/comic viewer for the web.
  *
- * https://github.com/tokagemushi/manga-viewer
+ * https://github.com/tokagemushi999/manga-viewer
  * (c) tokagemushi — MIT License
  */
 
@@ -25,10 +25,138 @@ const ICONS = {
   play:         '<svg viewBox="0 0 384 512" width="14" height="14" fill="currentColor"><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.8 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>',
 };
 
-// CSS is duplicated in manga-viewer.css for external use. Keep in sync or use build step.
+// ──────────────────────────────────────────
+// Tunable constants (durations in milliseconds)
+// ──────────────────────────────────────────
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.5;
+const DOUBLE_TAP_DELAY = 300;
+const TWO_FINGER_TAP_MAX_DIST = 50;          // max px between fingers for two-finger tap
+const ORIENTATION_DEBOUNCE_MS = 100;
+const ADSENSE_INIT_DELAY_MS = 500;
+const RESUME_NAVIGATE_DELAY_MS = 100;
+const TOAST_VISIBLE_MS = 2000;
+const TOAST_FADE_MS = 300;
+const BOOKMARK_LONG_PRESS_MS = 500;
+const PROGRESS_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+// ──────────────────────────────────────────
+// Default i18n messages (override via opts.messages).
+// Defaults are Japanese; override with English (or any locale) by passing
+// `messages: { ... }` in the constructor options. Only keys you supply get
+// replaced — the rest fall back to defaults.
+// ──────────────────────────────────────────
+const DEFAULT_MESSAGES = {
+  // Bookmarks
+  bookmarkPanelTitle:    'しおり',
+  bookmarkAdd:           ' 現在のページをブックマーク',
+  bookmarkRemove:        ' しおりを削除',
+  bookmarkEmpty:         'しおりはまだありません',
+  bookmarkPageLabel:     (n) => `${n}ページ`,
+  bookmarkDefaultTitle:  (n) => `ページ${n}`,
+  bookmarkAdded:         'しおりを追加しました',
+  bookmarkRemoved:       'しおりを削除しました',
+  bookmarkLimit:         (max) => `しおりは${max}個までです`,
+  bookmarkGenericError:  'エラーが発生しました',
+  bookmarkBtnTitle:      'しおり',
+  // Resume dialog
+  resumeTitle:           '続きから読みますか？',
+  resumeSubtitle:        (n) => `${n}ページから続行`,
+  resumeStart:           '最初から',
+  resumeContinue:        ' 続きから',
+  // Toast
+  linkCopied:            'リンクをコピーしました',
+  // Help
+  helpBtnTitle:          'ヘルプ',
+  helpClose:             '閉じる',
+  helpTitle:             ' ヘルプ',
+  helpSettings:          '⚙ 設定',
+  helpControls:          '👆 操作',
+  helpModePage:          'ページ送り',
+  helpModeScroll:        '縦スクロール',
+  helpDirRtl:            '右から左へ',
+  helpDirLtr:            '左から右へ',
+  helpDirection:         (label) => `読む方向: ${label}`,
+  helpScrollAction:      (action) => `${action}で上下に読む`,
+  helpScrollMobile:      'スワイプ',
+  helpScrollDesktop:     'スクロール',
+  helpTapLabel:          'タップ',
+  helpTapDesc:           (left, right) => `左: ${left}ページ / 右: ${right}ページ / 中央: メニュー`,
+  helpSwipeLabel:        'スワイプ',
+  helpSwipeDesc:         '左右にスワイプしてページめくり',
+  helpPinchLabel:        'ピンチ',
+  helpPinchDesc:         'ピンチでズーム、ドラッグで移動。端までドラッグでページ送り。',
+  helpClickLabel:        'クリック',
+  helpClickDesc:         (left, right) => `左: ${left} / 右: ${right} / 中央: メニュー`,
+  helpKeyboardLabel:     'キーボード',
+  helpKeyboardDesc:      '← →: ページめくり / Space: 次へ / Esc: ズーム解除',
+  helpZoomLabel:         'ズーム',
+  helpZoomDesc:          'ボタン、または中央ダブルクリックでズーム',
+  helpDirNext:           '次',
+  helpDirPrev:           '前',
+  // Aria-live page announcement
+  pageAnnounce:          (n, total) => `${n} / ${total} ページ`,
+  // Tap-area aria labels
+  ariaPrevPage:          '前のページ',
+  ariaNextPage:          '次のページ',
+  // Purchase / preview popup
+  purchaseTitle:         '試し読みここまで',
+  purchaseTotal:         (total, free) => `全${total}ページ — ${free}ページが無料`,
+  purchaseCta:           '購入して続きを読む',
+  purchaseBtn:           '購入',
+  purchaseBack:          '戻る',
+};
+
+// ──────────────────────────────────────────
+// HTML sanitizer whitelist (used by `type: 'html'` insert pages)
+// Override entirely by passing opts.htmlSanitizer (e.g. DOMPurify.sanitize).
+// ──────────────────────────────────────────
+const SANITIZE_ALLOWED_TAGS = new Set([
+  'div','span','p','br','hr','h1','h2','h3','h4','h5','h6',
+  'blockquote','pre','code','figure','figcaption',
+  'ul','ol','li','dl','dt','dd',
+  'a','em','strong','b','i','u','s','mark','small','sub','sup','kbd','abbr','time',
+  'img','picture','source','video','audio',
+  'table','thead','tbody','tfoot','tr','th','td','caption','colgroup','col',
+]);
+// Drop element AND its children (dangerous container tags).
+const SANITIZE_DISALLOWED_TAGS = new Set([
+  'script','style','iframe','frame','frameset','object','embed','applet',
+  'link','meta','base','title','head',
+  'form','input','button','select','option','textarea','fieldset','legend',
+]);
+const SANITIZE_GLOBAL_ATTRS = new Set([
+  'class','id','title','lang','dir','role','tabindex',
+]);
+const SANITIZE_TAG_ATTRS = {
+  a: new Set(['href','target','rel','download','hreflang']),
+  img: new Set(['src','alt','width','height','loading','decoding','srcset','sizes']),
+  picture: new Set([]),
+  source: new Set(['src','srcset','type','media','sizes']),
+  video: new Set(['src','controls','poster','preload','width','height','muted','loop','playsinline']),
+  audio: new Set(['src','controls','preload','muted','loop']),
+  th: new Set(['colspan','rowspan','scope']),
+  td: new Set(['colspan','rowspan']),
+  col: new Set(['span']),
+  colgroup: new Set(['span']),
+  time: new Set(['datetime']),
+  abbr: new Set([]),
+};
+// Match URL schemes we trust on href/src/action attributes.
+const SAFE_URL_RE = /^(?:(?:https?|mailto|tel|sms):|#|\/|\.\.?\/|data:image\/(?:png|jpe?g|gif|webp|svg\+xml);)/i;
+// Match dangerous patterns inside style="..." values.
+const DANGEROUS_STYLE_RE = /(?:expression\s*\(|url\s*\(|@import|behaviou?r\s*:|javascript\s*:|vbscript\s*:|data\s*:(?!image\/))/i;
+
+// ──────────────────────────────────────────
+// CSS — single source of truth lives in src/manga-viewer.css.
+// scripts/build.mjs syncs the literal below from that file.
+// (The viewer mounts in Shadow DOM, so external <link> styles cannot reach
+// internal classes; the CSS must be inlined here.)
+// ──────────────────────────────────────────
 const MANGA_VIEWER_CSS = String.raw`/**
- * Manga Viewer v0.2.0
- * https://github.com/tokagemushi/manga-viewer
+ * Manga Viewer v0.3.0
+ * https://github.com/tokagemushi999/manga-viewer
  * (c) tokagemushi — MIT License
  */
 
@@ -84,6 +212,19 @@ const MANGA_VIEWER_CSS = String.raw`/**
   to { transform: rotate(360deg); }
 }
 
+/* Visually-hidden for screen reader announcements */
+.mv-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ===== Container ===== */
 .mv-container {
   position: fixed;
@@ -115,6 +256,10 @@ const MANGA_VIEWER_CSS = String.raw`/**
   height: 100vh;
   height: 100dvh;
   z-index: 9999;
+}
+
+body.mv-pseudo-fullscreen-body {
+  overflow: hidden;
 }
 
 /* ===== Status Bar Cover (mobile notch) ===== */
@@ -1254,6 +1399,8 @@ class BookmarkManager {
     this._maxBookmarks = 20;
     this._bookmarks = []; // [{page_number, title, note?}]
     this._onChange = opts.onBookmarkChange || null;
+    this._signal = opts.signal || null;
+    this._msg = opts.messages || DEFAULT_MESSAGES;
   }
 
   _hashString(str) {
@@ -1269,10 +1416,12 @@ class BookmarkManager {
       try {
         const res = await fetch(`${this._api}?work_id=${encodeURIComponent(this._id)}`, {
           headers: this._headers,
+          signal: this._signal || undefined,
         });
         const data = await res.json();
         if (data.success) this._bookmarks = data.bookmarks || [];
-      } catch (_) {
+      } catch (e) {
+        if (e && e.name === 'AbortError') return this._bookmarks;
         this._loadLocal();
       }
     } else {
@@ -1308,9 +1457,9 @@ class BookmarkManager {
 
   async add(pageNum, title) {
     if (this._bookmarks.length >= this._maxBookmarks && !this.has(pageNum)) {
-      return { success: false, error: `しおりは${this._maxBookmarks}個までです` };
+      return { success: false, error: this._msg.bookmarkLimit(this._maxBookmarks) };
     }
-    title = title || `ページ${pageNum}`;
+    title = title || this._msg.bookmarkDefaultTitle(pageNum);
 
     if (this._api) {
       try {
@@ -1318,6 +1467,7 @@ class BookmarkManager {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...this._headers },
           body: JSON.stringify({ work_id: this._id, page_number: pageNum, title }),
+          signal: this._signal || undefined,
         });
         const data = await res.json();
         if (data.success) {
@@ -1396,6 +1546,13 @@ export default class MangaViewer {
    * @param {string}  [options.purchaseUrl]               — URL for purchase button
    * @param {string}  [options.purchasePrice]             — display price string
    * @param {string}  [options.loadingText='Loading...']
+   * @param {boolean} [options.bookmarks=true]            — enable bookmarks UI
+   * @param {string}  [options.bookmarkId]                — work-id used for bookmark sync; defaults to a hash of location.pathname
+   * @param {string}  [options.bookmarkApi=null]          — REST endpoint for cross-device bookmark sync
+   * @param {Object}  [options.bookmarkHeaders={}]        — extra fetch headers for bookmarkApi requests
+   * @param {Function}[options.onBookmarkChange]          — (bookmarks) => void; fires after add/remove
+   * @param {Function}[options.htmlSanitizer]             — (htmlString) => string; pass DOMPurify.sanitize for stronger guarantees
+   * @param {Object}  [options.messages]                  — partial override for UI strings (see DEFAULT_MESSAGES)
    */
   constructor(options = {}) {
     // ── Options ──
@@ -1417,15 +1574,19 @@ export default class MangaViewer {
       shareUrl: '',
       purchaseUrl: '',
       purchasePrice: '',
-      loadingText: 'Loading...',
+      loadingText: '読み込み中…',
       bookmarks: true,
       bookmarkId: '',
       bookmarkApi: null,
       bookmarkHeaders: {},
       onBookmarkChange: null,
+      htmlSanitizer: null,
+      messages: null,
     }, options);
 
     this.opts = o;
+    // Merge user-provided messages over the defaults, leaving unsupplied keys at default.
+    this._msg = Object.assign({}, DEFAULT_MESSAGES, o.messages || {});
 
     // resolve container
     this._host = typeof o.container === 'string'
@@ -1486,9 +1647,6 @@ export default class MangaViewer {
 
     // Zoom
     this._currentZoom = 1;
-    this._MIN_ZOOM = 1;
-    this._MAX_ZOOM = 3;
-    this._ZOOM_STEP = 0.5;
     this._zoomPanX = 0;
     this._zoomPanY = 0;
     this._isZoomPanning = false;
@@ -1524,7 +1682,6 @@ export default class MangaViewer {
     this._zoomPanStartYBackup = 0;
 
     // Double-tap
-    this._DOUBLE_TAP_DELAY = 300;
     this._lastTapTime = 0;
     this._pendingTapAction = null;
     this._lastTouchEndTime = 0;
@@ -1552,10 +1709,38 @@ export default class MangaViewer {
     this._bmLongPress = false;
     this._bmTimer = null;
 
+    // Pending async work (cleared on destroy)
+    this._timers = new Set();
+    this._rafs = new Set();
+    this._abortController = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    this._destroyed = false;
+
     // Build DOM & init
     this._build();
     this._init();
-    requestAnimationFrame(() => this._focusHost());
+    this._trackRaf(requestAnimationFrame(() => this._focusHost()));
+  }
+
+  /** Schedule a setTimeout that auto-cancels on destroy(). */
+  _setManagedTimeout(fn, ms) {
+    if (this._destroyed) return null;
+    const id = setTimeout(() => {
+      this._timers.delete(id);
+      if (!this._destroyed) fn();
+    }, ms);
+    this._timers.add(id);
+    return id;
+  }
+
+  /** Track a requestAnimationFrame ID so destroy() can cancel it. */
+  _trackRaf(id) {
+    if (id != null) this._rafs.add(id);
+    return id;
+  }
+
+  /** AbortSignal for fetch / event listeners that should die with the viewer. */
+  get abortSignal() {
+    return this._abortController ? this._abortController.signal : undefined;
   }
 
   // ─── Page normalisation ───
@@ -1582,6 +1767,14 @@ export default class MangaViewer {
     ]);
     this._root.appendChild(this._loadingEl);
 
+    // Screen-reader-only live region for page change announcements
+    this._liveRegion = el('div', {
+      className: 'mv-sr-only',
+      'aria-live': 'polite',
+      'aria-atomic': 'true',
+    });
+    this._root.appendChild(this._liveRegion);
+
     // Status bar cover
     this._statusBarCover = el('div', { className: 'mv-status-bar-cover' });
 
@@ -1594,9 +1787,9 @@ export default class MangaViewer {
     this._main.appendChild(this._slotTrack);
 
     // Tap areas (page mode only)
-    this._tapLeft = el('div', { className: 'mv-tap-area mv-left', role: 'button', 'aria-label': 'Previous page' });
+    this._tapLeft = el('div', { className: 'mv-tap-area mv-left', role: 'button', 'aria-label': this.opts.direction === 'rtl' ? this._msg.ariaNextPage : this._msg.ariaPrevPage });
     this._tapCenter = el('div', { className: 'mv-tap-area mv-center' });
-    this._tapRight = el('div', { className: 'mv-tap-area mv-right', role: 'button', 'aria-label': 'Next page' });
+    this._tapRight = el('div', { className: 'mv-tap-area mv-right', role: 'button', 'aria-label': this.opts.direction === 'rtl' ? this._msg.ariaPrevPage : this._msg.ariaNextPage });
     this._main.appendChild(this._tapLeft);
     this._main.appendChild(this._tapCenter);
     this._main.appendChild(this._tapRight);
@@ -1641,7 +1834,7 @@ export default class MangaViewer {
     const btns = el('div', { className: 'mv-header-buttons' });
 
     // Bookmark
-    this._bookmarkBtn = el('button', { className: 'mv-header-btn mv-bookmark-btn', title: 'Bookmarks' }, _svgIcon(ICONS.bookmark));
+    this._bookmarkBtn = el('button', { className: 'mv-header-btn mv-bookmark-btn', title: this._msg.bookmarkBtnTitle, 'aria-label': this._msg.bookmarkBtnTitle }, _svgIcon(ICONS.bookmark));
     if (this.opts.bookmarks) btns.appendChild(this._bookmarkBtn);
 
     // Fullscreen (PC only)
@@ -1655,7 +1848,7 @@ export default class MangaViewer {
     btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Copy link', onClick: () => this._copyLink() }, _svgIcon(ICONS.link)));
 
     // Help
-    btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Help', onClick: () => this._showHelp() }, _svgIcon(ICONS.question)));
+    btns.appendChild(el('button', { className: 'mv-header-btn', title: this._msg.helpBtnTitle, 'aria-label': this._msg.helpBtnTitle, onClick: () => this._showHelp() }, _svgIcon(ICONS.question)));
 
     header.appendChild(btns);
     return header;
@@ -1807,7 +2000,7 @@ export default class MangaViewer {
     this._preloadNearby();
 
     // AdSense push
-    setTimeout(() => this._initAds(), 500);
+    this._setManagedTimeout(() => this._initAds(), ADSENSE_INIT_DELAY_MS);
   }
 
   _createPageNode(pageIdx, loadingAttr) {
@@ -1949,7 +2142,7 @@ export default class MangaViewer {
     bind(this._main, 'wheel', this._onWheel, { passive: false });
     bind(this._slider, 'input', this._onSliderInput);
     bind(window, 'resize', this._onResize);
-    bind(window, 'orientationchange', () => setTimeout(() => this._onResize(), 100));
+    bind(window, 'orientationchange', () => this._setManagedTimeout(() => this._onResize(), ORIENTATION_DEBOUNCE_MS));
     bind(window, 'beforeunload', () => this._saveProgress());
     bind(document, 'visibilitychange', () => { if (document.visibilityState === 'hidden') this._saveProgress(); });
     bind(window, 'pagehide', () => this._saveProgress());
@@ -2062,7 +2255,7 @@ export default class MangaViewer {
       const container = this._getCurrentZoomContainer();
       if (container) container.classList.remove('mv-no-transition');
       if (this._currentZoom < 1.1) this.resetZoom();
-      else if (this._currentZoom > this._MAX_ZOOM) this._setZoom(this._MAX_ZOOM);
+      else if (this._currentZoom > ZOOM_MAX) this._setZoom(ZOOM_MAX);
       return;
     }
 
@@ -2074,7 +2267,7 @@ export default class MangaViewer {
           Math.pow(this._zoomPanStartX - this._lastTouchX, 2) +
           Math.pow(this._zoomPanStartY - this._lastTouchY, 2)
         );
-        if (now - this._lastTouchEndTime < this._DOUBLE_TAP_DELAY && dist < 50) {
+        if (now - this._lastTouchEndTime < DOUBLE_TAP_DELAY && dist < 50) {
           this.resetZoom();
         }
         this._lastTouchEndTime = now;
@@ -2267,11 +2460,11 @@ export default class MangaViewer {
     this._lastTapTime = now;
 
     if (this._currentZoom > 1) {
-      if (timeDiff < this._DOUBLE_TAP_DELAY) this.resetZoom();
+      if (timeDiff < DOUBLE_TAP_DELAY) this.resetZoom();
       return;
     }
 
-    if (timeDiff < this._DOUBLE_TAP_DELAY && this.opts.viewMode !== 'scroll') {
+    if (timeDiff < DOUBLE_TAP_DELAY && this.opts.viewMode !== 'scroll') {
       if (this._pendingTapAction) clearTimeout(this._pendingTapAction);
       this._zoomAtPoint(2, e.clientX || window.innerWidth * 0.15, e.clientY || window.innerHeight / 2);
       return;
@@ -2284,7 +2477,7 @@ export default class MangaViewer {
       } else {
         if (this._currentSlotIndex > 0) { this._currentSlotIndex--; this._updateTrackPosition(true); this._updateUI(); }
       }
-    }, this._DOUBLE_TAP_DELAY);
+    }, DOUBLE_TAP_DELAY);
   }
 
   _onTapCenter(e) {
@@ -2295,7 +2488,7 @@ export default class MangaViewer {
     const timeDiff = now - this._lastTapTime;
     this._lastTapTime = now;
 
-    if (timeDiff < this._DOUBLE_TAP_DELAY && this.opts.viewMode !== 'scroll') {
+    if (timeDiff < DOUBLE_TAP_DELAY && this.opts.viewMode !== 'scroll') {
       if (this._pendingTapAction) clearTimeout(this._pendingTapAction);
       if (this._currentZoom > 1) this.resetZoom();
       else this._zoomAtPoint(2, e.clientX || window.innerWidth / 2, e.clientY || window.innerHeight / 2);
@@ -2303,7 +2496,7 @@ export default class MangaViewer {
     }
 
     if (this._pendingTapAction) clearTimeout(this._pendingTapAction);
-    this._pendingTapAction = setTimeout(() => this._toggleUI(), this._DOUBLE_TAP_DELAY);
+    this._pendingTapAction = setTimeout(() => this._toggleUI(), DOUBLE_TAP_DELAY);
   }
 
   _onTapRight(e) {
@@ -2315,11 +2508,11 @@ export default class MangaViewer {
     this._lastTapTime = now;
 
     if (this._currentZoom > 1) {
-      if (timeDiff < this._DOUBLE_TAP_DELAY) this.resetZoom();
+      if (timeDiff < DOUBLE_TAP_DELAY) this.resetZoom();
       return;
     }
 
-    if (timeDiff < this._DOUBLE_TAP_DELAY && this.opts.viewMode !== 'scroll') {
+    if (timeDiff < DOUBLE_TAP_DELAY && this.opts.viewMode !== 'scroll') {
       if (this._pendingTapAction) clearTimeout(this._pendingTapAction);
       this._zoomAtPoint(2, e.clientX || window.innerWidth * 0.85, e.clientY || window.innerHeight / 2);
       return;
@@ -2332,7 +2525,7 @@ export default class MangaViewer {
       } else {
         if (this._currentSlotIndex < this._slots.length - 1) { this._currentSlotIndex++; this._updateTrackPosition(true); this._updateUI(); }
       }
-    }, this._DOUBLE_TAP_DELAY);
+    }, DOUBLE_TAP_DELAY);
   }
 
   // ─── Keyboard ───
@@ -2490,6 +2683,9 @@ export default class MangaViewer {
     // Bookmark state
     this._updateBookmarkBtn();
 
+    // a11y page announcement
+    this._announcePage(first);
+
     // Callbacks
     if (typeof this.opts.onPageChange === 'function') {
       this.opts.onPageChange(first, this._totalPages);
@@ -2516,7 +2712,7 @@ export default class MangaViewer {
   }
 
   _setZoom(newZoom) {
-    this._currentZoom = Math.max(this._MIN_ZOOM, Math.min(this._MAX_ZOOM, newZoom));
+    this._currentZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
     const container = this._getCurrentZoomContainer();
     if (container) {
       if (this._currentZoom > 1) container.classList.add('mv-zoomed');
@@ -2593,8 +2789,8 @@ export default class MangaViewer {
   }
 
   zoomIn() {
-    if (this._currentZoom >= this._MAX_ZOOM) return;
-    this._setZoom(this._currentZoom + this._ZOOM_STEP);
+    if (this._currentZoom >= ZOOM_MAX) return;
+    this._setZoom(this._currentZoom + ZOOM_STEP);
   }
 
   resetZoom() {
@@ -2606,8 +2802,8 @@ export default class MangaViewer {
   }
 
   _updateZoomButtons() {
-    if (this._zoomInBtn) this._zoomInBtn.disabled = this._currentZoom >= this._MAX_ZOOM;
-    if (this._zoomResetBtn) this._zoomResetBtn.disabled = this._currentZoom <= this._MIN_ZOOM;
+    if (this._zoomInBtn) this._zoomInBtn.disabled = this._currentZoom >= ZOOM_MAX;
+    if (this._zoomResetBtn) this._zoomResetBtn.disabled = this._currentZoom <= ZOOM_MIN;
   }
 
   _resetZoomOnPageChange() {
@@ -2780,7 +2976,7 @@ export default class MangaViewer {
       const s = localStorage.getItem(this.opts.storageKey);
       if (s) {
         const d = JSON.parse(s);
-        if (Date.now() - d.timestamp < 30 * 24 * 60 * 60 * 1000) return d;
+        if (Date.now() - d.timestamp < PROGRESS_MAX_AGE_MS) return d;
       }
     } catch (_) { /* ignore */ }
     return null;
@@ -2794,18 +2990,18 @@ export default class MangaViewer {
 
     const icon = el('div', { className: 'mv-resume-icon' }, _svgIcon('<svg viewBox="0 0 384 512" width="28" height="28" fill="#fff"><path d="M0 48V487.7C0 501.1 10.9 512 24.3 512c5 0 9.9-1.5 14-4.4L192 400 345.7 507.6c4.1 2.9 9 4.4 14 4.4 13.4 0 24.3-10.9 24.3-24.3V48c0-26.5-21.5-48-48-48H48C21.5 0 0 21.5 0 48z"/></svg>'));
     card.appendChild(icon);
-    card.appendChild(el('div', { className: 'mv-resume-title' }, 'Resume reading?'));
-    card.appendChild(el('div', { className: 'mv-resume-subtitle' }, `Continue from page ${pageNum}`));
+    card.appendChild(el('div', { className: 'mv-resume-title' }, this._msg.resumeTitle));
+    card.appendChild(el('div', { className: 'mv-resume-subtitle' }, this._msg.resumeSubtitle(pageNum)));
 
     const btns = el('div', { className: 'mv-resume-buttons' });
-    btns.appendChild(el('button', { className: 'mv-resume-btn mv-secondary', onClick: () => { overlay.remove(); try { localStorage.removeItem(this.opts.storageKey); } catch (_) {} } }, 'Start over'));
+    btns.appendChild(el('button', { className: 'mv-resume-btn mv-secondary', onClick: () => { overlay.remove(); try { localStorage.removeItem(this.opts.storageKey); } catch (_) {} } }, this._msg.resumeStart));
     const resumeBtn = el('button', {
       className: 'mv-resume-btn mv-primary',
-      onClick: () => { overlay.remove(); setTimeout(() => this.goToSlot(this._findSlotByPageIndex(saved.pageIndex)), 100); },
+      onClick: () => { overlay.remove(); this._setManagedTimeout(() => this.goToSlot(this._findSlotByPageIndex(saved.pageIndex)), RESUME_NAVIGATE_DELAY_MS); },
     });
     const resumeIcon = _svgIcon(ICONS.play);
     const resumeText = document.createElement('span');
-    resumeText.textContent = ' Resume';
+    resumeText.textContent = this._msg.resumeContinue;
     resumeBtn.appendChild(resumeIcon);
     resumeBtn.appendChild(resumeText);
     btns.appendChild(resumeBtn);
@@ -2893,7 +3089,7 @@ export default class MangaViewer {
     ta.select();
     document.execCommand('copy');
     ta.remove();
-    this._showToast('Link copied!');
+    this._showToast(this._msg.linkCopied);
   }
 
   // ─── Toast ───
@@ -2904,15 +3100,18 @@ export default class MangaViewer {
     toast.appendChild(_svgIcon(ICONS.check));
     toast.appendChild(document.createTextNode(` ${message}`));
     this._root.appendChild(toast);
-    setTimeout(() => { toast.classList.add('mv-fade-out'); setTimeout(() => toast.remove(), 300); }, 2000);
+    this._setManagedTimeout(() => {
+      toast.classList.add('mv-fade-out');
+      this._setManagedTimeout(() => toast.remove(), TOAST_FADE_MS);
+    }, TOAST_VISIBLE_MS);
   }
 
   // ─── Help ───
   _showHelp() {
-    const dir = this.opts.direction;
-    const isRtl = dir === 'rtl';
-    const mode = this.opts.viewMode === 'scroll' ? 'Vertical scroll' : 'Page flip';
-    const dirLabel = isRtl ? 'Right to left' : 'Left to right';
+    const m = this._msg;
+    const isRtl = this.opts.direction === 'rtl';
+    const mode = this.opts.viewMode === 'scroll' ? m.helpModeScroll : m.helpModePage;
+    const dirLabel = isRtl ? m.helpDirRtl : m.helpDirLtr;
     const isMob = this._isMobile;
     const isPage = this.opts.viewMode !== 'scroll';
 
@@ -2928,19 +3127,19 @@ export default class MangaViewer {
 
     const controls = [];
     if (!isPage) {
-      const action = isMob ? 'Swipe' : 'Scroll';
-      controls.push(makeHelpItem('↕', action, `${action} up/down to read`));
+      const action = isMob ? m.helpScrollMobile : m.helpScrollDesktop;
+      controls.push(makeHelpItem('↕', action, m.helpScrollAction(action)));
     } else if (isMob) {
       controls.push(
-        makeHelpItem('👆', 'Tap', `Left: ${isRtl ? 'next' : 'prev'} page / Right: ${isRtl ? 'prev' : 'next'} page / Center: toggle menu`),
-        makeHelpItem('👋', 'Swipe', 'Swipe left/right to turn pages'),
-        makeHelpItem('🔍', 'Pinch', 'Pinch to zoom, drag to pan. Drag to edge to turn page.')
+        makeHelpItem('👆', m.helpTapLabel, m.helpTapDesc(isRtl ? m.helpDirNext : m.helpDirPrev, isRtl ? m.helpDirPrev : m.helpDirNext)),
+        makeHelpItem('👋', m.helpSwipeLabel, m.helpSwipeDesc),
+        makeHelpItem('🔍', m.helpPinchLabel, m.helpPinchDesc),
       );
     } else {
       controls.push(
-        makeHelpItem('🖱', 'Click', `Left: ${isRtl ? 'next' : 'prev'} / Right: ${isRtl ? 'prev' : 'next'} / Center: menu`),
-        makeHelpItem('⌨', 'Keyboard', '← → : page turn / Space: next / Esc: reset zoom'),
-        makeHelpItem('🔍', 'Zoom', 'Use buttons or double-click center to zoom')
+        makeHelpItem('🖱', m.helpClickLabel, m.helpClickDesc(isRtl ? m.helpDirNext : m.helpDirPrev, isRtl ? m.helpDirPrev : m.helpDirNext)),
+        makeHelpItem('⌨', m.helpKeyboardLabel, m.helpKeyboardDesc),
+        makeHelpItem('🔍', m.helpZoomLabel, m.helpZoomDesc),
       );
     }
 
@@ -2953,19 +3152,19 @@ export default class MangaViewer {
     const header = el('div', { className: 'mv-help-header' });
     const title = el('div', { className: 'mv-help-title' });
     title.appendChild(_svgIcon(ICONS.questionCircle));
-    title.appendChild(document.createTextNode(' Help'));
-    const closeBtn = el('button', { className: 'mv-help-close', type: 'button', 'aria-label': 'Close' }, _svgIcon(ICONS.times));
+    title.appendChild(document.createTextNode(m.helpTitle));
+    const closeBtn = el('button', { className: 'mv-help-close', type: 'button', 'aria-label': m.helpClose }, _svgIcon(ICONS.times));
     closeBtn.addEventListener('click', () => overlay.remove());
     header.appendChild(title);
     header.appendChild(closeBtn);
 
     const content = el('div', { className: 'mv-help-content' });
     const settingsSection = el('div', { className: 'mv-help-section' });
-    settingsSection.appendChild(el('div', { className: 'mv-help-section-title' }, '⚙ Settings'));
-    settingsSection.appendChild(makeHelpItem('📖', mode, isPage ? `Direction: ${dirLabel}` : ''));
+    settingsSection.appendChild(el('div', { className: 'mv-help-section-title' }, m.helpSettings));
+    settingsSection.appendChild(makeHelpItem('📖', mode, isPage ? m.helpDirection(dirLabel) : ''));
 
     const controlsSection = el('div', { className: 'mv-help-section' });
-    controlsSection.appendChild(el('div', { className: 'mv-help-section-title' }, '👆 Controls'));
+    controlsSection.appendChild(el('div', { className: 'mv-help-section-title' }, m.helpControls));
     controls.forEach((item) => controlsSection.appendChild(item));
 
     content.appendChild(settingsSection);
@@ -2987,15 +3186,15 @@ export default class MangaViewer {
     card.appendChild(
       el('div', { className: 'mv-purchase-icon' }, _svgIcon('<svg width="36" height="36" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>'))
     );
-    card.appendChild(el('div', { className: 'mv-purchase-title' }, 'Preview ends here'));
-    card.appendChild(el('p', { className: 'mv-purchase-desc' }, `${this._totalOriginalPages} pages total — ${o.previewLimit} free`));
-    card.appendChild(el('p', { className: 'mv-purchase-desc' }, 'Purchase to continue reading'));
+    card.appendChild(el('div', { className: 'mv-purchase-title' }, this._msg.purchaseTitle));
+    card.appendChild(el('p', { className: 'mv-purchase-desc' }, this._msg.purchaseTotal(this._totalOriginalPages, o.previewLimit)));
+    card.appendChild(el('p', { className: 'mv-purchase-desc' }, this._msg.purchaseCta));
     if (o.purchaseUrl) {
-      const purchaseBtn = el('a', { href: purchaseUrl, className: 'mv-purchase-btn' }, 'Purchase');
+      const purchaseBtn = el('a', { href: purchaseUrl, className: 'mv-purchase-btn' }, this._msg.purchaseBtn);
       if (o.purchasePrice) purchaseBtn.appendChild(document.createTextNode(` ${o.purchasePrice}`));
       card.appendChild(purchaseBtn);
     }
-    if (o.backUrl) card.appendChild(el('a', { href: o.backUrl, className: 'mv-purchase-back' }, 'Go back'));
+    if (o.backUrl) card.appendChild(el('a', { href: o.backUrl, className: 'mv-purchase-back' }, this._msg.purchaseBack));
     popup.appendChild(card);
     this._root.appendChild(popup);
   }
@@ -3012,6 +3211,8 @@ export default class MangaViewer {
       bookmarkHeaders: this.opts.bookmarkHeaders,
       bookmarkId: this.opts.bookmarkId,
       onBookmarkChange: this.opts.onBookmarkChange,
+      messages: this._msg,
+      signal: this.abortSignal,
     });
     await this._bookmarkMgr.load();
     this._buildBookmarkPanel();
@@ -3024,8 +3225,8 @@ export default class MangaViewer {
 
     // Header
     const header = el('div', { className: 'mv-bookmark-panel-header' });
-    header.appendChild(el('span', { className: 'mv-bookmark-panel-title' }, 'しおり'));
-    header.appendChild(el('button', { className: 'mv-bookmark-panel-close', onClick: () => this._toggleBookmarkPanel(), 'aria-label': 'Close' }, _svgIcon(ICONS.times)));
+    header.appendChild(el('span', { className: 'mv-bookmark-panel-title' }, this._msg.bookmarkPanelTitle));
+    header.appendChild(el('button', { className: 'mv-bookmark-panel-close', onClick: () => this._toggleBookmarkPanel(), 'aria-label': this._msg.helpClose }, _svgIcon(ICONS.times)));
     this._bookmarkPanel.appendChild(header);
 
     // Add/remove button for current page
@@ -3057,14 +3258,14 @@ export default class MangaViewer {
     const hasCurrent = this._bookmarkMgr.has(currentPage);
     this._bookmarkToggleBtn.replaceChildren(
       _svgIcon(ICONS.bookmark),
-      document.createTextNode(hasCurrent ? ' しおりを削除' : ' 現在のページをブックマーク'),
+      document.createTextNode(hasCurrent ? this._msg.bookmarkRemove : this._msg.bookmarkAdd),
     );
     this._bookmarkToggleBtn.classList.toggle('mv-bookmark-remove', hasCurrent);
 
     // List
     this._bookmarkList.innerHTML = '';
     if (bms.length === 0) {
-      this._bookmarkList.appendChild(el('div', { className: 'mv-bookmark-empty' }, 'しおりはまだありません'));
+      this._bookmarkList.appendChild(el('div', { className: 'mv-bookmark-empty' }, this._msg.bookmarkEmpty));
       return;
     }
     bms.forEach(bm => {
@@ -3073,8 +3274,8 @@ export default class MangaViewer {
         this._toggleBookmarkPanel();
       }});
       const info = el('div', { className: 'mv-bookmark-item-info' });
-      info.appendChild(el('span', { className: 'mv-bookmark-item-page' }, `${bm.page_number}ページ`));
-      info.appendChild(el('span', { className: 'mv-bookmark-item-title' }, bm.title || `ページ${bm.page_number}`));
+      info.appendChild(el('span', { className: 'mv-bookmark-item-page' }, this._msg.bookmarkPageLabel(bm.page_number)));
+      info.appendChild(el('span', { className: 'mv-bookmark-item-title' }, bm.title || this._msg.bookmarkDefaultTitle(bm.page_number)));
       item.appendChild(info);
       const delBtn = el('button', { className: 'mv-bookmark-item-delete', onClick: (e) => {
         e.stopPropagation();
@@ -3088,16 +3289,85 @@ export default class MangaViewer {
     });
   }
 
+  /**
+   * Sanitize an HTML string for use in a `type: 'html'` insert page.
+   * - When `opts.htmlSanitizer` is supplied, it is used verbatim (pass DOMPurify.sanitize for stronger guarantees).
+   * - Otherwise a whitelist-based pass strips disallowed tags, dangerous attributes, and unsafe URL schemes.
+   * @returns {DocumentFragment}
+   */
   _sanitizeHtml(html) {
     const template = document.createElement('template');
-    template.innerHTML = String(html || '');
-    template.content.querySelectorAll('script').forEach((node) => node.remove());
-    template.content.querySelectorAll('*').forEach((node) => {
-      for (const attr of Array.from(node.attributes)) {
-        if (/^on/i.test(attr.name)) node.removeAttribute(attr.name);
+    const userSanitizer = this.opts.htmlSanitizer;
+    if (typeof userSanitizer === 'function') {
+      try {
+        template.innerHTML = String(userSanitizer(String(html || '')) || '');
+      } catch (e) {
+        // Sanitizer threw — drop the content rather than risk injection.
+        template.innerHTML = '';
       }
-    });
+      return template.content.cloneNode(true);
+    }
+    template.innerHTML = String(html || '');
+    this._sanitizeNode(template.content);
     return template.content.cloneNode(true);
+  }
+
+  _sanitizeNode(root) {
+    const toRemove = [];
+    const toUnwrap = [];
+    // TreeWalker is depth-first; collecting first then mutating keeps iteration sane.
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    let node = walker.nextNode();
+    while (node) {
+      const tag = node.tagName ? node.tagName.toLowerCase() : '';
+      if (SANITIZE_DISALLOWED_TAGS.has(tag)) {
+        toRemove.push(node);
+      } else if (!SANITIZE_ALLOWED_TAGS.has(tag)) {
+        toUnwrap.push(node);
+      } else {
+        this._sanitizeAttrs(node, tag);
+      }
+      node = walker.nextNode();
+    }
+    for (const n of toRemove) {
+      if (n.parentNode) n.parentNode.removeChild(n);
+    }
+    for (const n of toUnwrap) {
+      const parent = n.parentNode;
+      if (!parent) continue;
+      while (n.firstChild) parent.insertBefore(n.firstChild, n);
+      parent.removeChild(n);
+    }
+  }
+
+  _sanitizeAttrs(node, tag) {
+    const tagAllowed = SANITIZE_TAG_ATTRS[tag];
+    for (const attr of Array.from(node.attributes)) {
+      const name = attr.name.toLowerCase();
+      const value = attr.value;
+      // Strip event handlers (onclick, onerror, …) regardless of tag.
+      if (name.startsWith('on')) { node.removeAttribute(attr.name); continue; }
+      // ARIA / data attributes are allowed everywhere.
+      if (name.startsWith('aria-') || name.startsWith('data-')) continue;
+      if (!SANITIZE_GLOBAL_ATTRS.has(name) && !(tagAllowed && tagAllowed.has(name))) {
+        node.removeAttribute(attr.name); continue;
+      }
+      if (name === 'href' || name === 'src' || name === 'srcset' || name === 'action' || name === 'formaction') {
+        if (name === 'srcset') {
+          const ok = value.split(',').every(part => SAFE_URL_RE.test(part.trim().split(/\s+/)[0] || ''));
+          if (!ok) { node.removeAttribute(attr.name); continue; }
+        } else if (!SAFE_URL_RE.test(value.trim())) {
+          node.removeAttribute(attr.name); continue;
+        }
+      }
+      if (name === 'style' && DANGEROUS_STYLE_RE.test(value)) {
+        node.removeAttribute(attr.name);
+      }
+    }
+    // Force safe rel on links that open new tabs (reverse-tabnabbing protection).
+    if (tag === 'a' && node.hasAttribute('target')) {
+      node.setAttribute('rel', 'noopener noreferrer');
+    }
   }
 
   async _toggleCurrentPageBookmark() {
@@ -3105,14 +3375,20 @@ export default class MangaViewer {
     const currentPage = this._getCurrentPageIndex() + 1;
     if (this._bookmarkMgr.has(currentPage)) {
       await this._bookmarkMgr.remove(currentPage);
-      this._showToast('しおりを削除しました');
+      this._showToast(this._msg.bookmarkRemoved);
     } else {
       const result = await this._bookmarkMgr.add(currentPage);
-      if (result.success) this._showToast('しおりを追加しました');
-      else this._showToast(result.error || 'エラーが発生しました');
+      if (result.success) this._showToast(this._msg.bookmarkAdded);
+      else this._showToast(result.error || this._msg.bookmarkGenericError);
     }
     this._renderBookmarkList();
     this._updateBookmarkBtn();
+  }
+
+  _announcePage(pageNum) {
+    if (!this._liveRegion) return;
+    // Replace text rather than append so SR re-reads only the latest value.
+    this._liveRegion.textContent = this._msg.pageAnnounce(pageNum, this._totalPages);
   }
 
   _updateBookmarkBtn() {
@@ -3132,20 +3408,50 @@ export default class MangaViewer {
   /** Get bookmark manager */
   get bookmarkManager() { return this._bookmarkMgr; }
 
-  /** Destroy viewer and clean up */
+  /** Destroy viewer and clean up. Safe to call multiple times. */
   destroy() {
+    if (this._destroyed) return;
+    this._destroyed = true;
+
     this._stopMomentum();
     this._setPseudoFullscreenBodyLock(false);
+
     if (this._resizeRaf !== null) {
       cancelAnimationFrame(this._resizeRaf);
       this._resizeRaf = null;
     }
-    clearTimeout(this._bmTimer);
-    this._bmTimer = null;
+    if (this._bounceAnimationID !== null) {
+      cancelAnimationFrame(this._bounceAnimationID);
+      this._bounceAnimationID = null;
+    }
+    if (this._momentumID !== null) {
+      cancelAnimationFrame(this._momentumID);
+      this._momentumID = null;
+    }
+    for (const id of this._rafs) cancelAnimationFrame(id);
+    this._rafs.clear();
+
+    if (this._pendingTapAction !== null) {
+      clearTimeout(this._pendingTapAction);
+      this._pendingTapAction = null;
+    }
+    if (this._bmTimer !== null) {
+      clearTimeout(this._bmTimer);
+      this._bmTimer = null;
+    }
+    for (const id of this._timers) clearTimeout(id);
+    this._timers.clear();
+
+    if (this._abortController) {
+      try { this._abortController.abort(); } catch (_) {}
+      this._abortController = null;
+    }
+
     if (this._bound._list) {
       for (const [target, evt, fn, opts] of this._bound._list) {
         target.removeEventListener(evt, fn, opts);
       }
+      this._bound._list.length = 0;
     }
     this._root.replaceChildren();
   }
