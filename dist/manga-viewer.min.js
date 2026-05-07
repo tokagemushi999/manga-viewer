@@ -1,5 +1,5 @@
 /**
- * Manga Viewer v0.3.0
+ * Manga Viewer v0.4.0
  * A standalone, feature-rich manga/comic viewer for the web.
  *
  * https://github.com/tokagemushi999/manga-viewer
@@ -24,6 +24,19 @@ const ICONS = {
   times:        '<svg viewBox="0 0 384 512" width="14" height="14" fill="currentColor"><path d="M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3l105.4 105.3c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256l105.3-105.4z"/></svg>',
   play:         '<svg viewBox="0 0 384 512" width="14" height="14" fill="currentColor"><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.8 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>',
 };
+
+// ──────────────────────────────────────────
+// Public icons — pre-built SVG strings for use in `extraButtons[].icon`.
+// Exported so callers can do `import MangaViewer, { icons } from '...';`
+// then `extraButtons: [{ icon: icons.reload, label: '更新', onClick: ... }]`.
+// All strings pass through the built-in SVG sanitizer at render time.
+// ──────────────────────────────────────────
+export const icons = {
+  reload:  '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>',
+  download:'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+  print:   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
+};
+icons.refresh = icons.reload;     // alias
 
 // ──────────────────────────────────────────
 // Tunable constants (durations in milliseconds)
@@ -119,6 +132,11 @@ const SANITIZE_ALLOWED_TAGS = new Set([
   'a','em','strong','b','i','u','s','mark','small','sub','sup','kbd','abbr','time',
   'img','picture','source','video','audio',
   'table','thead','tbody','tfoot','tr','th','td','caption','colgroup','col',
+  // Inline SVG (icons). <foreignObject> is intentionally disallowed because
+  // it embeds arbitrary HTML; everything below is presentational only.
+  'svg','g','path','circle','ellipse','rect','line','polyline','polygon',
+  'text','tspan','title','desc','defs','use','symbol',
+  'lineargradient','radialgradient','stop','clippath','mask',
 ]);
 // Drop element AND its children (dangerous container tags).
 const SANITIZE_DISALLOWED_TAGS = new Set([
@@ -142,6 +160,27 @@ const SANITIZE_TAG_ATTRS = {
   colgroup: new Set(['span']),
   time: new Set(['datetime']),
   abbr: new Set([]),
+  // SVG presentational attributes. `xlink:href` is intentionally NOT in
+  // <use>'s set so external icon references can't be loaded.
+  svg: new Set(['viewBox','xmlns','width','height','fill','stroke','preserveAspectRatio','focusable','aria-hidden']),
+  g: new Set(['transform','fill','stroke','opacity','clip-path','mask']),
+  path: new Set(['d','fill','stroke','stroke-width','stroke-linecap','stroke-linejoin','stroke-miterlimit','stroke-dasharray','stroke-dashoffset','opacity','transform','clip-path','fill-rule','clip-rule','vector-effect']),
+  circle: new Set(['cx','cy','r','fill','stroke','stroke-width','opacity','transform']),
+  ellipse: new Set(['cx','cy','rx','ry','fill','stroke','stroke-width','opacity','transform']),
+  rect: new Set(['x','y','width','height','rx','ry','fill','stroke','stroke-width','opacity','transform']),
+  line: new Set(['x1','y1','x2','y2','stroke','stroke-width','opacity','transform']),
+  polyline: new Set(['points','fill','stroke','stroke-width','opacity','transform']),
+  polygon: new Set(['points','fill','stroke','stroke-width','opacity','transform']),
+  text: new Set(['x','y','dx','dy','text-anchor','fill','font-size','font-family','transform']),
+  tspan: new Set(['x','y','dx','dy','text-anchor','fill','font-size']),
+  use: new Set(['href','x','y','width','height','transform']),       // href guarded to '#fragment' below
+  symbol: new Set(['viewBox','id']),
+  defs: new Set([]),
+  lineargradient: new Set(['id','x1','y1','x2','y2','gradientUnits','gradientTransform','spreadMethod']),
+  radialgradient: new Set(['id','cx','cy','r','fx','fy','gradientUnits','gradientTransform','spreadMethod']),
+  stop: new Set(['offset','stop-color','stop-opacity']),
+  clippath: new Set(['id','clipPathUnits']),
+  mask: new Set(['id','x','y','width','height','maskUnits','maskContentUnits']),
 };
 // Match URL schemes we trust on href/src/action attributes.
 const SAFE_URL_RE = /^(?:(?:https?|mailto|tel|sms):|#|\/|\.\.?\/|data:image\/(?:png|jpe?g|gif|webp|svg\+xml);)/i;
@@ -155,10 +194,73 @@ const DANGEROUS_STYLE_RE = /(?:expression\s*\(|url\s*\(|@import|behaviou?r\s*:|j
 // internal classes; the CSS must be inlined here.)
 // ──────────────────────────────────────────
 const MANGA_VIEWER_CSS = String.raw`/**
- * Manga Viewer v0.3.0
+ * Manga Viewer v0.4.0
  * https://github.com/tokagemushi999/manga-viewer
  * (c) tokagemushi — MIT License
  */
+
+/* ============================================================
+   Theme tokens
+   These CSS variables are the single source of truth for every
+   color in the viewer. Overriding them on the host element (e.g.
+   \`#viewer { --mv-bg: #003366; }\`) applies the change throughout
+   Shadow DOM. The \`theme\` constructor option toggles between
+   built-in palettes by setting a class on the host:
+     - \`mv-theme-auto\`  (default): mobile=light, desktop=dark
+     - \`mv-theme-light\`: forced light
+     - \`mv-theme-dark\` : forced dark
+   ============================================================ */
+
+/* Default = dark palette. */
+:host {
+  --mv-bg:                 #000;
+  --mv-fg:                 #fff;
+  --mv-text-muted:         rgba(255, 255, 255, 0.7);
+  --mv-header-bg:          rgba(40, 40, 40, 0.95);
+  --mv-footer-bg:          rgba(40, 40, 40, 0.95);
+  --mv-btn-bg:             rgba(255, 255, 255, 0.08);
+  --mv-btn-bg-hover:       rgba(255, 255, 255, 0.15);
+  --mv-btn-fg:             rgba(255, 255, 255, 0.9);
+  --mv-slider-track:       rgba(255, 255, 255, 0.2);
+  --mv-spinner-track:      rgba(250, 204, 21, 0.2);
+  --mv-spinner-fg:         #facc15;
+  --mv-accent:             #facc15;
+  --mv-shadow:             rgba(0, 0, 0, 0.3);
+  --mv-footer-bottom-padding: 0px;
+}
+
+/* Light palette overrides. */
+:host(.mv-theme-light) {
+  --mv-bg:                 #fff;
+  --mv-fg:                 #333;
+  --mv-text-muted:         rgba(0, 0, 0, 0.5);
+  --mv-header-bg:          rgba(245, 245, 245, 0.98);
+  --mv-footer-bg:          rgba(245, 245, 245, 0.98);
+  --mv-btn-bg:             rgba(0, 0, 0, 0.06);
+  --mv-btn-bg-hover:       rgba(0, 0, 0, 0.1);
+  --mv-btn-fg:             #333;
+  --mv-slider-track:       rgba(0, 0, 0, 0.15);
+  --mv-spinner-track:      rgba(100, 100, 100, 0.2);
+  --mv-spinner-fg:         #666;
+}
+
+/* Auto mode mirrors viewport size — same behaviour as v0.3.x.
+   Skipped when explicit theme class is present. */
+@media (max-width: 768px) {
+  :host(.mv-theme-auto), :host(:not([class*="mv-theme-"])) {
+    --mv-bg:               #fff;
+    --mv-fg:               #333;
+    --mv-text-muted:       rgba(0, 0, 0, 0.5);
+    --mv-header-bg:        rgba(245, 245, 245, 0.98);
+    --mv-footer-bg:        rgba(245, 245, 245, 0.98);
+    --mv-btn-bg:           rgba(0, 0, 0, 0.06);
+    --mv-btn-bg-hover:     rgba(0, 0, 0, 0.1);
+    --mv-btn-fg:           #333;
+    --mv-slider-track:     rgba(0, 0, 0, 0.15);
+    --mv-spinner-track:    rgba(100, 100, 100, 0.2);
+    --mv-spinner-fg:       #666;
+  }
+}
 
 /* ===== Reset / Base ===== */
 .mv-loading-screen {
@@ -169,12 +271,8 @@ const MANGA_VIEWER_CSS = String.raw`/**
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #000;
+  background: var(--mv-bg);
   transition: opacity 0.4s ease, visibility 0.4s ease;
-}
-
-@media (max-width: 768px) {
-  .mv-loading-screen { background: #fff; }
 }
 
 .mv-loading-screen.mv-fade-out {
@@ -185,27 +283,16 @@ const MANGA_VIEWER_CSS = String.raw`/**
 .mv-loading-spinner {
   width: 48px;
   height: 48px;
-  border: 3px solid rgba(250, 204, 21, 0.2);
-  border-top-color: #facc15;
+  border: 3px solid var(--mv-spinner-track);
+  border-top-color: var(--mv-spinner-fg);
   border-radius: 50%;
   animation: mv-spin 0.8s linear infinite;
 }
 
-@media (max-width: 768px) {
-  .mv-loading-spinner {
-    border-color: rgba(100, 100, 100, 0.2);
-    border-top-color: #666;
-  }
-}
-
 .mv-loading-text {
   margin-top: 16px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--mv-text-muted);
   font-size: 14px;
-}
-
-@media (max-width: 768px) {
-  .mv-loading-text { color: rgba(0, 0, 0, 0.5); }
 }
 
 @keyframes mv-spin {
@@ -231,10 +318,10 @@ const MANGA_VIEWER_CSS = String.raw`/**
   inset: 0;
   height: 100vh;
   height: 100dvh;
-  background: #000;
+  background: var(--mv-bg);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
-  color: #fff;
+  color: var(--mv-fg);
   -webkit-text-size-adjust: 100%;
   box-sizing: border-box;
 }
@@ -243,10 +330,6 @@ const MANGA_VIEWER_CSS = String.raw`/**
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-}
-
-@media (max-width: 768px) {
-  .mv-container { background: #fff; }
 }
 
 .mv-container.mv-pseudo-fullscreen {
@@ -269,7 +352,7 @@ body.mv-pseudo-fullscreen-body {
   left: 0;
   right: 0;
   height: env(safe-area-inset-top, 0px);
-  background: #fff;
+  background: var(--mv-bg);
   z-index: 45;
   opacity: 0;
   transition: opacity 0.3s ease;
@@ -295,16 +378,9 @@ body.mv-pseudo-fullscreen-body {
   align-items: center;
   justify-content: space-between;
   z-index: 50;
-  background: rgba(40, 40, 40, 0.95);
+  background: var(--mv-header-bg);
   opacity: 1;
   transition: opacity 0.3s ease;
-}
-
-@media (max-width: 768px) {
-  .mv-header {
-    background: rgba(245, 245, 245, 0.98);
-  }
-  .mv-header .mv-title { color: #333 !important; }
 }
 
 .mv-header.mv-ui-hidden {
@@ -317,7 +393,7 @@ body.mv-pseudo-fullscreen-body {
 }
 
 .mv-title {
-  color: #fff;
+  color: var(--mv-fg);
   font-weight: bold;
   font-size: 14px;
   white-space: nowrap;
@@ -338,9 +414,9 @@ body.mv-pseudo-fullscreen-body {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--mv-btn-bg);
   border: none;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--mv-btn-fg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -351,7 +427,7 @@ body.mv-pseudo-fullscreen-body {
 }
 
 .mv-header-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--mv-btn-bg-hover);
 }
 
 .mv-header-btn svg {
@@ -365,11 +441,7 @@ body.mv-pseudo-fullscreen-body {
     width: 32px;
     height: 32px;
     font-size: 13px;
-    background: rgba(0, 0, 0, 0.06);
-    color: #333;
   }
-  .mv-header-btn:hover { background: rgba(0, 0, 0, 0.1); }
-  .mv-header-btn svg { fill: #333; }
   .mv-title { font-size: 13px; }
 }
 
@@ -380,21 +452,18 @@ body.mv-pseudo-fullscreen-body {
   left: 0;
   right: 0;
   padding: 8px 12px;
-  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  padding-bottom: calc(max(8px, env(safe-area-inset-bottom)) + var(--mv-footer-bottom-padding));
   z-index: 50;
-  background: rgba(40, 40, 40, 0.95);
+  background: var(--mv-footer-bg);
   opacity: 1;
   transition: opacity 0.3s ease;
 }
 
 @media (max-width: 768px) {
   .mv-footer {
-    background: rgba(245, 245, 245, 0.98);
     padding: 10px 16px 16px 16px;
-    padding-bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px));
+    padding-bottom: calc(max(16px, calc(env(safe-area-inset-bottom) + 8px)) + var(--mv-footer-bottom-padding));
   }
-  .mv-footer .mv-footer-info,
-  .mv-footer span { color: #333 !important; }
 }
 
 .mv-footer.mv-ui-hidden {
@@ -411,7 +480,7 @@ body.mv-pseudo-fullscreen-body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 4px;
-  color: #fff;
+  color: var(--mv-fg);
   font-size: 12px;
 }
 
@@ -425,7 +494,7 @@ body.mv-pseudo-fullscreen-body {
   height: 6px;
   -webkit-appearance: none;
   appearance: none;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--mv-slider-track);
   border-radius: 3px;
   outline: none;
   cursor: pointer;
@@ -433,7 +502,6 @@ body.mv-pseudo-fullscreen-body {
 
 @media (max-width: 768px) {
   .mv-page-slider {
-    background: rgba(0, 0, 0, 0.15);
     height: 8px;
     margin-top: 4px;
   }
@@ -473,11 +541,7 @@ body.mv-pseudo-fullscreen-body {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: #000;
-}
-
-@media (max-width: 768px) {
-  .mv-main { background: #fff; }
+  background: var(--mv-bg);
 }
 
 .mv-main.mv-scroll-mode {
@@ -569,7 +633,7 @@ body.mv-pseudo-fullscreen-body {
   aspect-ratio: var(--mv-blank-aspect-ratio, auto);
   max-width: 50%;
   max-height: 100%;
-  background: #000;
+  background: var(--mv-bg);
 }
 
 .mv-page-fill {
@@ -1582,7 +1646,16 @@ export default class MangaViewer {
       onBookmarkChange: null,
       htmlSanitizer: null,
       messages: null,
+      theme: 'auto',
+      hideButtons: [],
+      extraButtons: [],
+      footerBottomPadding: null,
     }, options);
+
+    if (!['auto', 'light', 'dark'].includes(o.theme)) {
+      // Defensive — fall back rather than throw, since theme is cosmetic.
+      o.theme = 'auto';
+    }
 
     this.opts = o;
     // Merge user-provided messages over the defaults, leaving unsupplied keys at default.
@@ -1594,6 +1667,14 @@ export default class MangaViewer {
       : o.container;
     if (!this._host) throw new Error('MangaViewer: container not found');
     this._host.setAttribute('tabindex', '0');
+    this._host.classList.remove('mv-theme-auto', 'mv-theme-light', 'mv-theme-dark');
+    this._host.classList.add(`mv-theme-${o.theme}`);
+    if (o.footerBottomPadding != null) {
+      const value = typeof o.footerBottomPadding === 'number'
+        ? `${o.footerBottomPadding}px`
+        : String(o.footerBottomPadding);
+      this._host.style.setProperty('--mv-footer-bottom-padding', value);
+    }
     this.shadowRoot = this._host.shadowRoot || this._host.attachShadow({ mode: 'open' });
     this._root = this.shadowRoot;
 
@@ -1810,12 +1891,75 @@ export default class MangaViewer {
     this._zoomControls = el('div', { className: 'mv-zoom-controls' });
     this._zoomInBtn = el('button', { className: 'mv-zoom-btn', title: 'Zoom in', onClick: () => this.zoomIn() }, _svgIcon(ICONS.searchPlus));
     this._zoomResetBtn = el('button', { className: 'mv-zoom-btn', title: 'Reset zoom', disabled: 'disabled', onClick: () => this.resetZoom() }, _svgIcon(ICONS.compressAlt));
-    this._zoomControls.appendChild(this._zoomInBtn);
-    this._zoomControls.appendChild(this._zoomResetBtn);
+    if (!this._isHidden('zoomIn'))    this._zoomControls.appendChild(this._zoomInBtn);
+    if (!this._isHidden('zoomReset')) this._zoomControls.appendChild(this._zoomResetBtn);
     this._container.appendChild(this._zoomControls);
 
     this._container.appendChild(this._statusBarCover);
     this._root.appendChild(this._container);
+  }
+
+  /** Returns true when the named standard button is in `opts.hideButtons`. */
+  _isHidden(name) {
+    return Array.isArray(this.opts.hideButtons) && this.opts.hideButtons.includes(name);
+  }
+
+  /**
+   * Render the icon value supplied in an extraButtons entry.
+   * - HTMLElement / DocumentFragment → cloned and used verbatim
+   * - String → treated as inline SVG and run through the sanitizer
+   * - Falsy → returns null
+   * @returns {Node|null}
+   */
+  _renderExtraIcon(icon) {
+    if (!icon) return null;
+    if (icon instanceof Node) return icon.cloneNode(true);
+    if (typeof icon === 'string') {
+      const frag = this._sanitizeHtml(icon);
+      // If sanitizer stripped everything, fall back gracefully.
+      return frag.childNodes.length ? frag : null;
+    }
+    return null;
+  }
+
+  /**
+   * Append all caller-supplied buttons whose `slot` matches the given slot
+   * name onto `target`. Insertion order in the array is preserved; `position`
+   * controls insertion against the existing children of `target`.
+   */
+  _appendExtraButtons(target, slot) {
+    const list = Array.isArray(this.opts.extraButtons) ? this.opts.extraButtons : [];
+    for (const def of list) {
+      if (!def || typeof def.onClick !== 'function') continue;
+      if ((def.slot || 'header') !== slot) continue;
+
+      const label = def.label || def.ariaLabel || '';
+      const ariaLabel = def.ariaLabel || label;
+      const className = `mv-header-btn${def.className ? ' ' + def.className : ''}`;
+      const btn = el('button', {
+        className,
+        type: 'button',
+        title: label,
+        'aria-label': ariaLabel,
+        onClick: (event) => {
+          try { def.onClick(event, this); } catch (e) { /* never let user code break the viewer */ }
+        },
+      });
+      const iconNode = this._renderExtraIcon(def.icon);
+      if (iconNode) btn.appendChild(iconNode);
+      else if (label) btn.appendChild(document.createTextNode(label));
+
+      // Position: 'start' | 'end' | number. Default 'end'.
+      const pos = def.position;
+      if (pos === 'start') {
+        target.insertBefore(btn, target.firstChild);
+      } else if (typeof pos === 'number' && Number.isFinite(pos)) {
+        const ref = target.children[Math.max(0, Math.min(pos, target.children.length))];
+        if (ref) target.insertBefore(btn, ref); else target.appendChild(btn);
+      } else {
+        target.appendChild(btn);
+      }
+    }
   }
 
   _buildHeader() {
@@ -1824,7 +1968,7 @@ export default class MangaViewer {
 
     // Back button
     const backBtn = el('a', { href: o.backUrl, className: 'mv-header-btn', title: 'Back' }, _svgIcon(ICONS.chevronLeft));
-    header.appendChild(backBtn);
+    if (!this._isHidden('back')) header.appendChild(backBtn);
 
     // Title
     const title = el('h1', { className: 'mv-title' }, o.title);
@@ -1835,20 +1979,29 @@ export default class MangaViewer {
 
     // Bookmark
     this._bookmarkBtn = el('button', { className: 'mv-header-btn mv-bookmark-btn', title: this._msg.bookmarkBtnTitle, 'aria-label': this._msg.bookmarkBtnTitle }, _svgIcon(ICONS.bookmark));
-    if (this.opts.bookmarks) btns.appendChild(this._bookmarkBtn);
+    if (this.opts.bookmarks && !this._isHidden('bookmark')) btns.appendChild(this._bookmarkBtn);
 
     // Fullscreen (PC only)
     this._fullscreenBtn = el('button', { className: 'mv-header-btn mv-pc-only', title: 'Fullscreen', onClick: () => this._toggleFullscreen() }, _svgIcon(ICONS.expand));
-    btns.appendChild(this._fullscreenBtn);
+    if (!this._isHidden('fullscreen')) btns.appendChild(this._fullscreenBtn);
 
     // Share to X
-    btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Share on X', onClick: () => this._shareToX() }, _svgIcon(ICONS.xLogo)));
+    if (!this._isHidden('share')) {
+      btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Share on X', onClick: () => this._shareToX() }, _svgIcon(ICONS.xLogo)));
+    }
 
     // Copy link
-    btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Copy link', onClick: () => this._copyLink() }, _svgIcon(ICONS.link)));
+    if (!this._isHidden('copy')) {
+      btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Copy link', onClick: () => this._copyLink() }, _svgIcon(ICONS.link)));
+    }
 
     // Help
-    btns.appendChild(el('button', { className: 'mv-header-btn', title: this._msg.helpBtnTitle, 'aria-label': this._msg.helpBtnTitle, onClick: () => this._showHelp() }, _svgIcon(ICONS.question)));
+    if (!this._isHidden('help')) {
+      btns.appendChild(el('button', { className: 'mv-header-btn', title: this._msg.helpBtnTitle, 'aria-label': this._msg.helpBtnTitle, onClick: () => this._showHelp() }, _svgIcon(ICONS.question)));
+    }
+
+    // Caller-supplied custom buttons (header slot)
+    this._appendExtraButtons(btns, 'header');
 
     header.appendChild(btns);
     return header;
@@ -1877,6 +2030,9 @@ export default class MangaViewer {
       'aria-label': 'Page slider',
     });
     footer.appendChild(this._slider);
+
+    // Caller-supplied custom buttons (footer slot)
+    this._appendExtraButtons(footer, 'footer');
 
     return footer;
   }
@@ -3353,7 +3509,10 @@ export default class MangaViewer {
         node.removeAttribute(attr.name); continue;
       }
       if (name === 'href' || name === 'src' || name === 'srcset' || name === 'action' || name === 'formaction') {
-        if (name === 'srcset') {
+        // <use href> must be fragment-only — external SVG icons can carry scripts.
+        if (tag === 'use' && name === 'href') {
+          if (!/^#[\w-]+$/.test(value.trim())) { node.removeAttribute(attr.name); continue; }
+        } else if (name === 'srcset') {
           const ok = value.split(',').every(part => SAFE_URL_RE.test(part.trim().split(/\s+/)[0] || ''));
           if (!ok) { node.removeAttribute(attr.name); continue; }
         } else if (!SAFE_URL_RE.test(value.trim())) {
