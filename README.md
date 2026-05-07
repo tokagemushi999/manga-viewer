@@ -112,6 +112,10 @@
 | `adsense` | `{ client, slot }` | `null` | 末尾にAdSenseページを追加 |
 | `htmlSanitizer` | `Function \| null` | `null` | `type:'html'` 用のサニタイザ。未指定時は組み込みのホワイトリスト方式を使用。`DOMPurify.sanitize` を渡すとさらに安全 |
 | `messages` | `Object \| null` | `null` | UI文字列の上書き（後述）。既定値は日本語 |
+| `theme` | `'auto' \| 'light' \| 'dark'` | `'auto'` | テーマ。`auto`=画面幅で切替（既定挙動）、`light`/`dark`=強制 |
+| `hideButtons` | `string[]` | `[]` | 非表示にするボタン名（後述） |
+| `extraButtons` | `ExtraButton[]` | `[]` | カスタムボタン挿入（後述） |
+| `footerBottomPadding` | `number \| string \| null` | `null` | フッター下余白（px）。CSS変数 `--mv-footer-bottom-padding` でも指定可 |
 | `onPageChange` | `Function` | `null` | `(currentPage, totalPages) => {}` |
 | `onComplete` | `Function` | `null` | 最終ページに到達したとき呼ばれる |
 
@@ -151,6 +155,57 @@
 | `viewer.zoomIn()` | 1段階ズームイン |
 | `viewer.resetZoom()` | ズームを1倍にリセット |
 | `viewer.destroy()` | ビューアを破棄。タイマー、フェッチ、イベントリスナーをすべて解放（複数回呼んでも安全） |
+
+### 🎨 テーマ（v0.4.0+）
+
+```js
+new MangaViewer({
+  theme: 'dark',     // 既定 'auto'（モバイル明・デスクトップ暗）
+  // 'light' / 'dark' で固定
+});
+```
+
+色を細かくカスタマイズしたい場合は CSS 変数を上書き:
+
+```css
+#viewer {
+  --mv-bg: #1a1a1a;
+  --mv-fg: #f0f0f0;
+  --mv-header-bg: rgba(20, 20, 20, 0.95);
+  --mv-accent: #ff6b6b;
+}
+```
+
+主なCSS変数: `--mv-bg`, `--mv-fg`, `--mv-text-muted`, `--mv-header-bg`, `--mv-footer-bg`, `--mv-btn-bg`, `--mv-btn-bg-hover`, `--mv-btn-fg`, `--mv-slider-track`, `--mv-spinner-track`, `--mv-spinner-fg`, `--mv-accent`, `--mv-shadow`, `--mv-footer-bottom-padding`
+
+### 🔘 ボタンのカスタマイズ（v0.4.0+）
+
+**標準ボタンを隠す**:
+```js
+new MangaViewer({
+  hideButtons: ['share', 'copy'],   // X共有とリンクコピーを非表示
+});
+```
+標準名: `'back'`, `'bookmark'`, `'fullscreen'`, `'share'`, `'copy'`, `'help'`, `'zoomIn'`, `'zoomReset'`
+
+**カスタムボタンを追加**:
+```js
+import MangaViewer, { icons } from './manga-viewer.js';
+
+new MangaViewer({
+  extraButtons: [
+    {
+      slot: 'header',                       // 'header' | 'footer'
+      position: 'end',                       // 'start' | 'end' | number
+      icon: icons.reload,                    // SVG文字列、HTMLElement、DocumentFragment いずれも可
+      label: '更新',
+      onClick: (event, viewer) => location.reload(),
+    },
+  ],
+});
+```
+
+提供アイコン: `icons.reload` / `icons.refresh`（aliasとして同一） / `icons.download` / `icons.print`
 
 ### 🌐 i18n / UIの言語切り替え
 
