@@ -4,6 +4,43 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-05-07
+
+### Added
+- **`theme` option** — `'auto'` (default, current viewport-based behaviour),
+  `'light'`, or `'dark'`. The forced modes apply regardless of viewport size,
+  so mobile users can have a black background.
+- **`hideButtons` option** — array of standard button names to hide. Names:
+  `'back'`, `'bookmark'`, `'fullscreen'`, `'share'`, `'copy'`, `'help'`,
+  `'zoomIn'`, `'zoomReset'`. Future-compatible (new buttons appear by default).
+- **`extraButtons` option** — inject custom buttons into the header or footer.
+  Each entry has `slot` / `position` / `icon` / `label` / `onClick` /
+  `className` / `ariaLabel`. Icons accept HTMLElement, DocumentFragment, or
+  inline SVG strings (sanitized through a presentation-only SVG whitelist).
+- **`footerBottomPadding` option** — extra padding (px) below the slider,
+  e.g. to overlay a credit row. Equivalent to setting the
+  `--mv-footer-bottom-padding` CSS variable on the host element.
+- **`icons` named export** — pre-built SVG strings for common actions:
+  `icons.reload` / `icons.refresh` / `icons.download` / `icons.print`.
+- **`--mv-*` CSS variables** — every theme color is exposed as a custom
+  property (`--mv-bg`, `--mv-fg`, `--mv-header-bg`, `--mv-footer-bg`,
+  `--mv-btn-bg`, `--mv-btn-bg-hover`, `--mv-btn-fg`, `--mv-slider-track`,
+  `--mv-spinner-track`, `--mv-spinner-fg`, `--mv-accent`, `--mv-shadow`,
+  `--mv-text-muted`, `--mv-footer-bottom-padding`). Override on the host
+  element to customize without forking.
+
+### Changed
+- The legacy `@media (max-width: 768px)` palette overrides have been
+  consolidated into the CSS variable system. Visual output for `theme: 'auto'`
+  (the default) is unchanged.
+
+### Migration notes
+- All v0.3.x configurations continue to work unchanged. The new options have
+  defaults that preserve existing behaviour.
+- If you previously injected your own CSS to override viewer colors, you can
+  now use the `--mv-*` variables instead — they propagate into Shadow DOM
+  via the host element.
+
 ## [0.3.0] — 2026-05-07
 
 ### Added

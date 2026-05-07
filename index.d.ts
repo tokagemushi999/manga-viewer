@@ -145,7 +145,59 @@ export interface MangaViewerOptions {
    * (or any locale) by passing the keys you want to replace.
    */
   messages?: MangaViewerMessages | null;
+  /**
+   * Theme palette.
+   * - `'auto'` (default): mobile = light, desktop = dark — same as v0.3.x
+   * - `'light'`: forced light palette regardless of viewport
+   * - `'dark'`:  forced dark palette regardless of viewport
+   * Override individual colors via the `--mv-*` CSS variables on the host.
+   */
+  theme?: 'auto' | 'light' | 'dark';
+  /**
+   * Names of standard buttons to hide. Recognized names:
+   * `'back' | 'bookmark' | 'fullscreen' | 'share' | 'copy' | 'help' | 'zoomIn' | 'zoomReset'`.
+   * Use `showHeader: false` / `showFooter: false` to hide entire bars.
+   */
+  hideButtons?: string[];
+  /**
+   * Custom buttons to inject into the header or footer.
+   */
+  extraButtons?: ExtraButton[];
+  /**
+   * Extra padding (px) below the footer slider, useful when overlaying
+   * a credit row or your own UI on top of the viewer. Equivalent to
+   * setting `--mv-footer-bottom-padding` as a CSS variable on the host.
+   */
+  footerBottomPadding?: number | string | null;
 }
+
+export interface ExtraButton {
+  /** Default `'header'`. */
+  slot?: 'header' | 'footer';
+  /** Default `'end'`. Numbers are treated as zero-based child indexes. */
+  position?: 'start' | 'end' | number;
+  /**
+   * Icon. `HTMLElement` / `DocumentFragment` is used verbatim (cloned).
+   * A string is treated as inline SVG and is run through the built-in
+   * SVG sanitizer — only presentational SVG is allowed.
+   */
+  icon?: HTMLElement | DocumentFragment | string;
+  /** Used as both `title` (tooltip) and the text fallback when no icon. */
+  label: string;
+  /** Defaults to `label`. */
+  ariaLabel?: string;
+  /** Extra class on the rendered `<button>`. */
+  className?: string;
+  /** Click handler. Receives the native event and the viewer instance. */
+  onClick: (event: Event, viewer: MangaViewer) => void;
+}
+
+export const icons: {
+  reload: string;
+  refresh: string;
+  download: string;
+  print: string;
+};
 
 export default class MangaViewer {
   constructor(options?: MangaViewerOptions);
