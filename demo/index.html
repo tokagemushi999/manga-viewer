@@ -31,7 +31,10 @@
     本デモは<a href="https://densho810.com/free/" target="_blank" rel="noopener">二次利用フリー規約</a>に基づき使用しています
   </div>
   <script type="module">
-    import MangaViewer from '../src/manga-viewer.js';
+    // v0.4.0+ ships an `icons` named export with pre-built sanitized SVGs
+    // (icons.reload / icons.refresh / icons.download / icons.print).
+    // Uncomment the import below if you use them in extraButtons.
+    import MangaViewer /*, { icons } */ from '../src/manga-viewer.js';
 
     // Generate page URLs (page-001.jpg ~ page-209.jpg)
     const totalPages = 209;
@@ -53,6 +56,39 @@
       loadingText: '読み込み中...',
       bookmarks: true,
       bookmarkId: 'bjyk-vol1',
+
+      // ─── v0.4.0 customization options (uncomment to try) ───
+      //
+      // Force a specific palette regardless of viewport size.
+      //   theme: 'dark',     // black background even on mobile
+      //   theme: 'light',    // white background even on desktop
+      //
+      // Hide standard buttons by name. Recognised:
+      //   'back', 'bookmark', 'fullscreen', 'share', 'copy', 'help',
+      //   'zoomIn', 'zoomReset'
+      //   hideButtons: ['share', 'copy'],
+      //
+      // Inject custom buttons. `icon` accepts HTMLElement, DocumentFragment,
+      // or an inline SVG string (sanitized). `icons.reload` is supplied by
+      // the library — see the import line above.
+      //   extraButtons: [{
+      //     slot: 'header',
+      //     icon: icons.reload,
+      //     label: '更新',
+      //     onClick: () => location.reload(),
+      //   }],
+      //
+      // Extra space below the slider — useful when overlaying credits or
+      // your own UI. Equivalent to `--mv-footer-bottom-padding` CSS var.
+      //   footerBottomPadding: 28,
+      //
+      // Override any UI string. Defaults are Japanese; supply English
+      // (or any locale) for the keys you want to replace.
+      //   messages: {
+      //     resumeTitle: 'Resume reading?',
+      //     resumeStart: 'Start over',
+      //     resumeContinue: ' Resume',
+      //   },
     });
   </script>
 </body>
