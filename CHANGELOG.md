@@ -4,6 +4,57 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-05-08
+
+### Added
+- **`onBack` option** — function called when the back button is clicked.
+  When supplied, the default navigation to `backUrl` is suppressed and the
+  callback runs instead. Drop-in replacement for `() => history.back()`.
+- **`lastPageAlign` option** — controls where the last page sits when
+  spread mode produces an odd-numbered orphan at the end. Values:
+  `'center'` (default — single centered slot, v0.4.x compat),
+  `'start'` (reading-start side: RTL→right, LTR→left), or
+  `'end'` (reading-end side: RTL→left, LTR→right).
+- **PWA-aware footer padding** — when running as an installed PWA
+  (`@media (display-mode: standalone)`), the footer slider gets an extra
+  16px below to clear the iOS home indicator. Tunable via the
+  `--mv-pwa-footer-bonus` CSS variable on the host.
+
+### Fixed
+- **SVG sanitizer dropped `viewBox` and other camelCase attributes** —
+  `_sanitizeAttrs` lowercases attr names before whitelist lookup, but
+  `SANITIZE_TAG_ATTRS` still listed the camelCase originals
+  (`viewBox`, `preserveAspectRatio`, `gradientUnits`, …), so the lookup
+  silently failed and those attributes were stripped. Without `viewBox`,
+  the SVG falls back to its `width`/`height` for the user-space coordinate
+  system, which mismatches the path coordinates and clips the rendered
+  icon. Affects every `extraButtons[].icon` supplied as a string,
+  including `icons.reload` from the library. All keys in
+  `SANITIZE_TAG_ATTRS` are now lowercase.
+- **SVG icon rendering** — switched the internal `_svgIcon` helper from
+  `DOMParser` + `importNode` to a `<template>` parser. The previous
+  approach occasionally produced empty / namespace-broken nodes inside
+  Shadow DOM on some Safari versions.
+- **Header icons re-styled** to Material Design solid set; line-style
+  icons looked under-weight at the 16–18px header button size.
+- **Auto theme on mobile** — the `:not([class*="mv-theme-"])` selector
+  used inside `:host()` proved fragile in some browsers and could drop the
+  whole rule, leaving icons white-on-white in mobile auto mode. The cascade
+  now uses plain `:host` inside the mobile media query, with explicit
+  `:host(.mv-theme-light/dark)` overrides above it.
+- **Pop font cascade into Shadow DOM** — moved the default
+  `font-family: 'Zen Maru Gothic', 'M PLUS Rounded 1c', …` from
+  `.mv-container` to `:host` so help overlays / resume dialogs / toasts
+  inherit it instead of falling back to system sans.
+
+### Migration notes
+- All v0.4.x configurations continue to work unchanged.
+- If you used `backUrl` for in-page navigation control, consider
+  switching to `onBack: () => history.back()` for a more natural feel.
+- If you noticed last-page centering in spread mode and wanted it
+  right-aligned (RTL) or left-aligned (LTR), set
+  `lastPageAlign: 'start'` (page sits where the next-page slot would be).
+
 ## [0.4.0] — 2026-05-07
 
 ### Added

@@ -169,6 +169,21 @@ export interface MangaViewerOptions {
    * setting `--mv-footer-bottom-padding` as a CSS variable on the host.
    */
   footerBottomPadding?: number | string | null;
+  /**
+   * Optional callback invoked when the back button is clicked. When
+   * supplied, the navigation to `backUrl` is suppressed and this function
+   * runs instead. Use it for `history.back()` or to return to a landing
+   * screen.
+   */
+  onBack?: ((event: Event, viewer: MangaViewer) => void) | null;
+  /**
+   * Where to place the last page when spread mode produces a single
+   * orphan page at the end.
+   * - `'center'` (default): single centered slot — same as v0.4.x.
+   * - `'start'`: page at reading-start side of the spread (RTL=right, LTR=left).
+   * - `'end'`: page at reading-end side of the spread (RTL=left, LTR=right).
+   */
+  lastPageAlign?: 'center' | 'start' | 'end';
 }
 
 export interface ExtraButton {

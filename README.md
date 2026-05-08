@@ -116,6 +116,8 @@
 | `hideButtons` | `string[]` | `[]` | 非表示にするボタン名（後述） |
 | `extraButtons` | `ExtraButton[]` | `[]` | カスタムボタン挿入（後述） |
 | `footerBottomPadding` | `number \| string \| null` | `null` | フッター下余白（px）。CSS変数 `--mv-footer-bottom-padding` でも指定可 |
+| `onBack` | `Function \| null` | `null` | 戻るボタンクリック時のコールバック。指定すると `backUrl` への遷移を抑止し、この関数を実行（`() => history.back()` 等で使用） |
+| `lastPageAlign` | `'center' \| 'start' \| 'end'` | `'center'` | 見開きで最終ページが奇数で余ったときの寄せ位置。`'start'`=読み始め側（RTL→右、LTR→左）、`'end'`=読み終わり側 |
 | `onPageChange` | `Function` | `null` | `(currentPage, totalPages) => {}` |
 | `onComplete` | `Function` | `null` | 最終ページに到達したとき呼ばれる |
 
