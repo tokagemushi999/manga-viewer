@@ -1,5 +1,5 @@
 /**
- * Manga Viewer v0.5.1
+ * Manga Viewer v0.6.0
  * A standalone, feature-rich manga/comic viewer for the web.
  *
  * https://github.com/tokagemushi999/manga-viewer
@@ -29,9 +29,9 @@ const ICONS = {
 };
 
 // ──────────────────────────────────────────
-// Public icons — pre-built SVG strings for use in `extraButtons[].icon`.
+// Public icons — pre-built SVG strings for use in custom `headerButtons`.
 // Exported so callers can do `import MangaViewer, { icons } from '...';`
-// then `extraButtons: [{ icon: icons.reload, label: '更新', onClick: ... }]`.
+// then `headerButtons: ['back', { icon: icons.reload, label: '更新', onClick: ... }, 'help']`.
 // All strings pass through the built-in SVG sanitizer at render time.
 // ──────────────────────────────────────────
 export const icons = {
@@ -203,7 +203,7 @@ const DANGEROUS_STYLE_RE = /(?:expression\s*\(|url\s*\(|@import|behaviou?r\s*:|j
 // internal classes; the CSS must be inlined here.)
 // ──────────────────────────────────────────
 const MANGA_VIEWER_CSS = String.raw`/**
- * Manga Viewer v0.5.1
+ * Manga Viewer v0.6.0
  * https://github.com/tokagemushi999/manga-viewer
  * (c) tokagemushi — MIT License
  */
@@ -1704,12 +1704,10 @@ export default class MangaViewer {
       htmlSanitizer: null,
       messages: null,
       theme: 'auto',
-      hideButtons: [],
-      extraButtons: [],
+      headerButtons: null,
       footerBottomPadding: null,
       onBack: null,
       lastPageAlign: 'center',
-      headerOrder: null,
     }, options);
 
     if (!['auto', 'light', 'dark'].includes(o.theme)) {
@@ -1947,25 +1945,21 @@ export default class MangaViewer {
     if (!o.showFooter) this._footer.classList.add('mv-hidden');
     this._container.appendChild(this._footer);
 
-    // Zoom controls
+    // Zoom controls (always visible — they're a pinch-zoom HUD, not a
+    // primary header action).
     this._zoomControls = el('div', { className: 'mv-zoom-controls' });
     this._zoomInBtn = el('button', { className: 'mv-zoom-btn', title: 'Zoom in', onClick: () => this.zoomIn() }, _svgIcon(ICONS.searchPlus));
     this._zoomResetBtn = el('button', { className: 'mv-zoom-btn', title: 'Reset zoom', disabled: 'disabled', onClick: () => this.resetZoom() }, _svgIcon(ICONS.compressAlt));
-    if (!this._isHidden('zoomIn'))    this._zoomControls.appendChild(this._zoomInBtn);
-    if (!this._isHidden('zoomReset')) this._zoomControls.appendChild(this._zoomResetBtn);
+    this._zoomControls.appendChild(this._zoomInBtn);
+    this._zoomControls.appendChild(this._zoomResetBtn);
     this._container.appendChild(this._zoomControls);
 
     this._container.appendChild(this._statusBarCover);
     this._root.appendChild(this._container);
   }
 
-  /** Returns true when the named standard button is in `opts.hideButtons`. */
-  _isHidden(name) {
-    return Array.isArray(this.opts.hideButtons) && this.opts.hideButtons.includes(name);
-  }
-
   /**
-   * Render the icon value supplied in an extraButtons entry.
+   * Render the icon value supplied in a custom button definition.
    * - HTMLElement / DocumentFragment → cloned and used verbatim
    * - String → treated as inline SVG and run through the sanitizer
    * - Falsy → returns null
@@ -1983,56 +1977,36 @@ export default class MangaViewer {
   }
 
   /**
-   * Append all caller-supplied buttons whose `slot` matches the given slot
-   * name onto `target`. Insertion order in the array is preserved; `position`
-   * controls insertion against the existing children of `target`.
+   * Build a `<button>` element from a custom button definition (the
+   * object form accepted in the `headerButtons` array).
    */
-  _appendExtraButtons(target, slot) {
-    const list = Array.isArray(this.opts.extraButtons) ? this.opts.extraButtons : [];
-    for (const def of list) {
-      if (!def || typeof def.onClick !== 'function') continue;
-      if ((def.slot || 'header') !== slot) continue;
-
-      const label = def.label || def.ariaLabel || '';
-      const ariaLabel = def.ariaLabel || label;
-      const className = `mv-header-btn${def.className ? ' ' + def.className : ''}`;
-      const btn = el('button', {
-        className,
-        type: 'button',
-        title: label,
-        'aria-label': ariaLabel,
-        onClick: (event) => {
-          try { def.onClick(event, this); } catch (e) { /* never let user code break the viewer */ }
-        },
-      });
-      const iconNode = this._renderExtraIcon(def.icon);
-      if (iconNode) btn.appendChild(iconNode);
-      else if (label) btn.appendChild(document.createTextNode(label));
-
-      // Position: 'start' | 'end' | number. Default 'end'.
-      const pos = def.position;
-      if (pos === 'start') {
-        target.insertBefore(btn, target.firstChild);
-      } else if (typeof pos === 'number' && Number.isFinite(pos)) {
-        const ref = target.children[Math.max(0, Math.min(pos, target.children.length))];
-        if (ref) target.insertBefore(btn, ref); else target.appendChild(btn);
-      } else {
-        target.appendChild(btn);
-      }
-    }
+  _buildCustomButton(def) {
+    const label = def.label || def.ariaLabel || '';
+    const ariaLabel = def.ariaLabel || label;
+    const className = `mv-header-btn${def.className ? ' ' + def.className : ''}`;
+    const btn = el('button', {
+      className,
+      type: 'button',
+      title: label,
+      'aria-label': ariaLabel,
+      onClick: (event) => {
+        try { def.onClick(event, this); } catch (e) { /* never let user code break the viewer */ }
+      },
+    });
+    const iconNode = this._renderExtraIcon(def.icon);
+    if (iconNode) btn.appendChild(iconNode);
+    else if (label) btn.appendChild(document.createTextNode(label));
+    return btn;
   }
 
   _buildHeader() {
     const o = this.opts;
     const header = el('div', { className: 'mv-header' });
 
-    // Builder map. Keys are the recognised standard button names. Each
-    // builder returns a fresh DOM node (or null if the button shouldn't
-    // be created at all — e.g. bookmarks disabled).
-    const builders = {
+    // Standard button factories. Each returns a fresh DOM node, or null
+    // when the button shouldn't appear at all (e.g. bookmarks disabled).
+    const standard = {
       back: () => {
-        // - opts.onBack as a function intercepts the click and skips backUrl.
-        // - Otherwise the button navigates to opts.backUrl like in v0.4.x.
         const backHref = (typeof o.onBack === 'function') ? '#' : o.backUrl;
         const btn = el('a', { href: backHref, className: 'mv-header-btn', title: 'Back', 'aria-label': 'Back' }, _svgIcon(ICONS.chevronLeft));
         if (typeof o.onBack === 'function') {
@@ -2056,39 +2030,42 @@ export default class MangaViewer {
       copy:  () => el('button', { className: 'mv-header-btn', title: 'Copy link', onClick: () => this._copyLink() }, _svgIcon(ICONS.link)),
       help:  () => el('button', { className: 'mv-header-btn', title: this._msg.helpBtnTitle, 'aria-label': this._msg.helpBtnTitle, onClick: () => this._showHelp() }, _svgIcon(ICONS.question)),
     };
+    const DEFAULT_ORDER = ['back', 'bookmark', 'fullscreen', 'share', 'copy', 'help'];
 
-    // Resolve the order. With opts.headerOrder set, only buttons whose
-    // names appear in the array are rendered, in that exact order
-    // (whitelist mode). Without it we fall back to the v0.4.x default
-    // ordering plus opts.hideButtons removals.
-    const explicit = Array.isArray(o.headerOrder) ? o.headerOrder : null;
-    const desiredOrder = explicit
-      ? explicit.filter((name) => Object.prototype.hasOwnProperty.call(builders, name))
-      : ['back', 'bookmark', 'fullscreen', 'share', 'copy', 'help']
-          .filter((name) => !this._isHidden(name));
+    // headerButtons is a single mixed array:
+    //   - Strings select standard buttons by name.
+    //   - Objects describe custom buttons (icon, label, onClick, ...).
+    //   - Order in the array == display order. Names not in the array
+    //     are hidden. Pass null (default) for the full default lineup.
+    const items = Array.isArray(o.headerButtons) ? o.headerButtons : DEFAULT_ORDER;
 
-    // Back stays on the left of the title; other buttons land in the
-    // right cluster. Conventional reader layout.
+    // 'back' anchors to the left of the title; everything else goes
+    // into the right-side cluster.
     const rightCluster = el('div', { className: 'mv-header-buttons' });
-    let backRendered = false;
-    for (const name of desiredOrder) {
-      const node = builders[name] && builders[name]();
+    let backPlaced = false;
+    for (const item of items) {
+      let node = null;
+      let isBack = false;
+      if (typeof item === 'string') {
+        if (!Object.prototype.hasOwnProperty.call(standard, item)) continue;
+        node = standard[item]();
+        isBack = (item === 'back');
+      } else if (item && typeof item === 'object' && typeof item.onClick === 'function') {
+        node = this._buildCustomButton(item);
+      }
       if (!node) continue;
-      if (name === 'back' && !backRendered) {
+      if (isBack && !backPlaced) {
         header.appendChild(node);
-        backRendered = true;
+        backPlaced = true;
       } else {
         rightCluster.appendChild(node);
       }
     }
 
-    // Title goes between back and right cluster regardless of layout choice.
+    // Title is absolutely centred; placed after back so it sits above
+    // overlapping content if any.
     const title = el('h1', { className: 'mv-title' }, o.title);
     header.appendChild(title);
-
-    // Caller-supplied custom buttons (header slot) — always go after the
-    // standard buttons in the right cluster, regardless of headerOrder.
-    this._appendExtraButtons(rightCluster, 'header');
 
     header.appendChild(rightCluster);
     return header;
@@ -2117,9 +2094,6 @@ export default class MangaViewer {
       'aria-label': 'Page slider',
     });
     footer.appendChild(this._slider);
-
-    // Caller-supplied custom buttons (footer slot)
-    this._appendExtraButtons(footer, 'footer');
 
     return footer;
   }

@@ -154,15 +154,26 @@ export interface MangaViewerOptions {
    */
   theme?: 'auto' | 'light' | 'dark';
   /**
-   * Names of standard buttons to hide. Recognized names:
-   * `'back' | 'bookmark' | 'fullscreen' | 'share' | 'copy' | 'help' | 'zoomIn' | 'zoomReset'`.
-   * Use `showHeader: false` / `showFooter: false` to hide entire bars.
+   * Header button list. Mixed array of standard button names (strings)
+   * and custom button definitions (objects). Order in the array maps
+   * 1:1 to display order. Names not in the array are hidden.
+   * `'back'` is always anchored to the left of the title; everything
+   * else fills the right cluster.
+   *
+   *   headerButtons: [
+   *     'back',
+   *     'bookmark',
+   *     { icon: icons.reload, label: '更新', onClick: () => location.reload() },
+   *     'help',
+   *   ]
+   *
+   * Recognised standard names:
+   * `'back' | 'bookmark' | 'fullscreen' | 'share' | 'copy' | 'help'`.
+   *
+   * Pass `null` (default) for the full default lineup in the order
+   * `['back', 'bookmark', 'fullscreen', 'share', 'copy', 'help']`.
    */
-  hideButtons?: string[];
-  /**
-   * Custom buttons to inject into the header or footer.
-   */
-  extraButtons?: ExtraButton[];
+  headerButtons?: Array<string | HeaderButton> | null;
   /**
    * Extra padding (px) below the footer slider, useful when overlaying
    * a credit row or your own UI on top of the viewer. Equivalent to
@@ -184,27 +195,10 @@ export interface MangaViewerOptions {
    * - `'end'`: page at reading-end side of the spread (RTL=left, LTR=right).
    */
   lastPageAlign?: 'center' | 'start' | 'end';
-  /**
-   * Whitelist + ordering for standard header buttons. When supplied,
-   * only the listed names are rendered (in that exact order); names not
-   * in the array are hidden. This option supersedes `hideButtons` for
-   * the listed buttons. Recognised names:
-   * `'back' | 'bookmark' | 'fullscreen' | 'share' | 'copy' | 'help'`.
-   * `'back'` always anchors to the left of the header; other listed
-   * names go into the right cluster in the order given. `extraButtons`
-   * are always appended after the standard buttons in the right cluster.
-   *
-   * Pass `null` (default) to use the v0.4.x default order combined with
-   * `hideButtons` for removals.
-   */
-  headerOrder?: string[] | null;
 }
 
-export interface ExtraButton {
-  /** Default `'header'`. */
-  slot?: 'header' | 'footer';
-  /** Default `'end'`. Numbers are treated as zero-based child indexes. */
-  position?: 'start' | 'end' | number;
+/** Custom button definition usable inside `headerButtons`. */
+export interface HeaderButton {
   /**
    * Icon. `HTMLElement` / `DocumentFragment` is used verbatim (cloned).
    * A string is treated as inline SVG and is run through the built-in

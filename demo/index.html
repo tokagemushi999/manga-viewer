@@ -235,7 +235,7 @@
   </div>
 
   <script type="module">
-    import MangaViewer, { icons } from '../src/manga-viewer.js?v=0.5.0';
+    import MangaViewer, { icons } from '../src/manga-viewer.js?v=0.6.0';
 
     const totalPages = 209;
     const pages = [];
@@ -304,22 +304,24 @@
 
     function readConfig() {
       const fd = new FormData(form);
-      const hideButtons = [];
-      if (!fd.get('show-back'))       hideButtons.push('back');
-      if (!fd.get('show-bookmark'))   hideButtons.push('bookmark');
-      if (!fd.get('show-fullscreen')) hideButtons.push('fullscreen');
-      if (!fd.get('show-share'))      hideButtons.push('share');
-      if (!fd.get('show-copy'))       hideButtons.push('copy');
-      if (!fd.get('show-help'))       hideButtons.push('help');
 
-      const extraButtons = [];
+      // Build the v0.6.0 headerButtons array. Standard names go in only
+      // when their checkbox is on; the reload custom button is appended
+      // when toggled on (placed just before help in the order).
+      const headerButtons = [];
+      if (fd.get('show-back'))       headerButtons.push('back');
+      if (fd.get('show-bookmark'))   headerButtons.push('bookmark');
+      if (fd.get('show-fullscreen')) headerButtons.push('fullscreen');
+      if (fd.get('show-share'))      headerButtons.push('share');
+      if (fd.get('show-copy'))       headerButtons.push('copy');
       if (fd.get('extra-reload')) {
-        extraButtons.push({
+        headerButtons.push({
           icon: icons.reload,
           label: '更新',
           onClick: () => location.reload(),
         });
       }
+      if (fd.get('show-help'))       headerButtons.push('help');
 
       const previewRaw = fd.get('preview-limit');
       const previewLimit = previewRaw ? Number(previewRaw) || null : null;
@@ -341,8 +343,7 @@
         title:           fd.get('title') || '',
         footerPad:       Number(fd.get('footer-pad')) || 0,
         lastPageAlign,
-        hideButtons,
-        extraButtons,
+        headerButtons,
         previewLimit,
       };
     }
@@ -363,8 +364,7 @@
         bookmarks:           true,
         bookmarkId:          'demo-configurator',
         theme:               cfg.theme,
-        hideButtons:         cfg.hideButtons,
-        extraButtons:        cfg.extraButtons,
+        headerButtons:       cfg.headerButtons,
         footerBottomPadding: cfg.footerPad,
         lastPageAlign:       cfg.lastPageAlign,
         onBack:              () => closeViewer(),
