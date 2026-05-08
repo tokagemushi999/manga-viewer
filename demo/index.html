@@ -4,92 +4,402 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#000000">
-  <title>ブラックジャックによろしく 第1巻 — Manga Viewer Demo</title>
+  <meta name="theme-color" content="#FDFBF7">
+  <title>Manga Viewer Demo — ぷれぐら！</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../src/manga-viewer.css?v=3">
+  <link rel="preconnect" href="https://cdn.tailwindcss.com">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&family=Dela+Gothic+One&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Zen Maru Gothic', 'sans-serif'],
+            display: ['Dela Gothic One', 'cursive'],
+          }
+        }
+      }
+    };
+  </script>
+
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; }
-    .credit {
+    body {
+      font-family: 'Zen Maru Gothic', sans-serif;
+      background-color: #FDFBF7;
+    }
+    .font-display { font-family: 'Dela Gothic One', cursive; }
+
+    /* === Viewer overlay state ============================================ */
+    body.is-viewer { overflow: hidden; background: #000; }
+    body.is-viewer .config-screen,
+    body.is-viewer .site-header { display: none !important; }
+    .viewer-screen { display: none; }
+    body.is-viewer .viewer-screen { display: block; }
+
+    .back-link {
+      position: fixed;
+      top: max(12px, env(safe-area-inset-top));
+      left: 12px;
+      z-index: 9999;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Zen Maru Gothic', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 8px 14px;
+      border-radius: 9999px;
+      background: rgba(253, 251, 247, 0.95);
+      color: #1f2937;
+      text-decoration: none;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      cursor: pointer;
+      border: none;
+    }
+    .back-link:hover { background: #fff; }
+
+    .demo-credit {
       position: fixed; bottom: 0; left: 0; right: 0;
-      background: rgba(0,0,0,0.85); color: #ccc;
+      background: rgba(0, 0, 0, 0.85); color: #ddd;
       font-size: 11px; text-align: center; padding: 6px 10px;
-      z-index: 40; line-height: 1.5;
+      z-index: 60;                     /* sit above viewer footer */
+      line-height: 1.5;
+      display: none;
+      padding-bottom: max(6px, env(safe-area-inset-bottom));
     }
-    .mv-footer {
-      bottom: 28px !important;
-    }
-    .credit a { color: #8cf; }
+    body.is-viewer .demo-credit { display: block; }
+    .demo-credit a { color: #fbbf24; }
   </style>
 </head>
-<body>
-  <div id="viewer"></div>
-  <div class="credit">
-    「ブラックジャックによろしく」佐藤秀峰 ／
-    本デモは<a href="https://densho810.com/free/" target="_blank" rel="noopener">二次利用フリー規約</a>に基づき使用しています
-  </div>
-  <script type="module">
-    // v0.4.0+ ships an `icons` named export with pre-built sanitized SVGs
-    // (icons.reload / icons.refresh / icons.download / icons.print).
-    // Uncomment the import below if you use them in extraButtons.
-    import MangaViewer /*, { icons } */ from '../src/manga-viewer.js';
+<body class="text-gray-800">
+  <!-- ────── Header (matches Pregra style) ────── -->
+  <header class="site-header bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div class="max-w-4xl mx-auto px-4 md:px-6 py-3 md:py-4 flex justify-between items-center">
+      <a href="/" class="font-display text-lg md:text-xl text-gray-800">
+        ぷれぐら！<span class="text-yellow-400">PLAYGROUND</span>
+      </a>
+      <a href="/article/manga-viewer" class="text-gray-600 hover:text-gray-800 font-bold text-xs md:text-sm">
+        <i class="fas fa-arrow-left mr-1 md:mr-2"></i><span class="hidden sm:inline">記事に戻る</span><span class="sm:hidden">戻る</span>
+      </a>
+    </div>
+  </header>
 
-    // Generate page URLs (page-001.jpg ~ page-209.jpg)
+  <!-- ────── Configurator ────── -->
+  <main class="config-screen max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
+    <!-- Hero -->
+    <div class="mb-6 md:mb-8">
+      <div class="flex flex-wrap items-center gap-2 md:gap-3 mb-3">
+        <span class="bg-orange-500 text-white text-xs md:text-sm font-bold px-2 md:px-3 py-1 rounded-full">DEMO</span>
+        <span class="bg-gray-200 text-gray-700 text-xs md:text-sm font-bold px-2 md:px-3 py-1 rounded-full">Manga Viewer v0.4.0</span>
+      </div>
+      <h1 class="font-bold text-xl md:text-3xl text-gray-800 leading-snug mb-2">
+        カスタマイズして読む
+      </h1>
+      <p class="text-gray-600 text-sm md:text-base">
+        テーマやボタン構成をその場で切り替えて、設定した状態でビューアを起動できます。
+        <span class="text-gray-500">v0.4.0 で追加された <code class="bg-gray-100 px-1 rounded">theme</code> / <code class="bg-gray-100 px-1 rounded">hideButtons</code> / <code class="bg-gray-100 px-1 rounded">extraButtons</code> を試せます。</span>
+      </p>
+    </div>
+
+    <form id="config-form" class="space-y-4">
+      <!-- Theme -->
+      <section class="bg-white border border-gray-200 rounded-2xl p-4 md:p-5 shadow-sm">
+        <h2 class="font-bold text-gray-800 mb-3 flex items-center gap-2">
+          <i class="fas fa-palette text-yellow-500"></i> テーマ
+        </h2>
+        <div class="flex flex-wrap gap-3 text-sm md:text-base">
+          <label class="inline-flex items-center gap-2 cursor-pointer"><input type="radio" name="theme" value="auto" checked class="accent-yellow-500"> 自動<span class="text-gray-500 text-xs">(モバイル明・PC暗)</span></label>
+          <label class="inline-flex items-center gap-2 cursor-pointer"><input type="radio" name="theme" value="light" class="accent-yellow-500"> 常に明</label>
+          <label class="inline-flex items-center gap-2 cursor-pointer"><input type="radio" name="theme" value="dark" class="accent-yellow-500"> 常に暗</label>
+        </div>
+      </section>
+
+      <!-- Direction -->
+      <section class="bg-white border border-gray-200 rounded-2xl p-4 md:p-5 shadow-sm">
+        <h2 class="font-bold text-gray-800 mb-3 flex items-center gap-2">
+          <i class="fas fa-book-open text-yellow-500"></i> 読む方向
+        </h2>
+        <div class="flex flex-wrap gap-3 text-sm md:text-base">
+          <label class="inline-flex items-center gap-2 cursor-pointer"><input type="radio" name="direction" value="rtl" checked class="accent-yellow-500"> 右綴じ<span class="text-gray-500 text-xs">(日本の漫画)</span></label>
+          <label class="inline-flex items-center gap-2 cursor-pointer"><input type="radio" name="direction" value="ltr" class="accent-yellow-500"> 左綴じ<span class="text-gray-500 text-xs">(西洋コミック)</span></label>
+        </div>
+      </section>
+
+      <!-- Header buttons -->
+      <section class="bg-white border border-gray-200 rounded-2xl p-4 md:p-5 shadow-sm">
+        <h2 class="font-bold text-gray-800 mb-1 flex items-center gap-2">
+          <i class="fas fa-bars text-yellow-500"></i> ヘッダーボタン
+        </h2>
+        <p class="text-xs text-gray-500 mb-3">チェックを外したボタンが非表示になります。</p>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+          <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" name="show-back" checked class="accent-yellow-500"> 戻る</label>
+          <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" name="show-bookmark" checked class="accent-yellow-500"> しおり</label>
+          <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" name="show-fullscreen" checked class="accent-yellow-500"> フルスクリーン</label>
+          <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" name="show-share" checked class="accent-yellow-500"> X共有</label>
+          <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" name="show-copy" checked class="accent-yellow-500"> リンクコピー</label>
+          <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" name="show-help" checked class="accent-yellow-500"> ヘルプ</label>
+        </div>
+      </section>
+
+      <!-- Custom button -->
+      <section class="bg-white border border-gray-200 rounded-2xl p-4 md:p-5 shadow-sm">
+        <h2 class="font-bold text-gray-800 mb-3 flex items-center gap-2">
+          <i class="fas fa-plus-circle text-yellow-500"></i> カスタムボタン追加
+        </h2>
+        <label class="inline-flex items-center gap-2 cursor-pointer text-sm md:text-base">
+          <input type="checkbox" name="extra-reload" class="accent-yellow-500">
+          <span>更新ボタン<span class="text-gray-500 text-xs">（ヘッダーに 🔄 を追加）</span></span>
+        </label>
+        <p class="text-xs text-gray-500 mt-2">
+          <code class="bg-gray-100 px-1 rounded">extraButtons</code> オプションのデモです。任意のSVGアイコンと <code class="bg-gray-100 px-1 rounded">onClick</code> を渡せます。
+        </p>
+      </section>
+
+      <!-- Layout -->
+      <section class="bg-white border border-gray-200 rounded-2xl p-4 md:p-5 shadow-sm">
+        <h2 class="font-bold text-gray-800 mb-3 flex items-center gap-2">
+          <i class="fas fa-th-large text-yellow-500"></i> レイアウト
+        </h2>
+        <label class="inline-flex items-center gap-2 cursor-pointer text-sm md:text-base mb-3">
+          <input type="checkbox" name="first-single" checked class="accent-yellow-500">
+          <span>見開き時に1ページ目を単独表示</span>
+        </label>
+        <div class="mb-3">
+          <p class="text-sm font-medium text-gray-700 mb-1">見開きで最終ページが余ったとき</p>
+          <p class="text-xs text-gray-500 mb-2">右綴じ漫画なら「右寄せ」が自然です。</p>
+          <div class="flex flex-wrap gap-3 text-sm">
+            <label class="inline-flex items-center gap-2 cursor-pointer"><input type="radio" name="last-align" value="center" checked class="accent-yellow-500"> 中央</label>
+            <label class="inline-flex items-center gap-2 cursor-pointer"><input type="radio" name="last-align" value="rtl-right" class="accent-yellow-500"> 右寄せ</label>
+            <label class="inline-flex items-center gap-2 cursor-pointer"><input type="radio" name="last-align" value="rtl-left" class="accent-yellow-500"> 左寄せ</label>
+          </div>
+        </div>
+        <label class="flex items-center gap-2 text-sm md:text-base">
+          <span>フッター下の余白</span>
+          <input type="number" name="footer-pad" value="32" min="0" max="120" step="2" class="w-20 px-2 py-1 border border-gray-300 rounded-lg text-right">
+          <span class="text-gray-500 text-sm">px</span>
+        </label>
+        <p class="text-xs text-gray-500 mt-1">既定の 32px はこのデモのクレジット行を下に納めるための値です。</p>
+      </section>
+
+      <!-- Preview limit -->
+      <section class="bg-white border border-gray-200 rounded-2xl p-4 md:p-5 shadow-sm">
+        <h2 class="font-bold text-gray-800 mb-3 flex items-center gap-2">
+          <i class="fas fa-eye text-yellow-500"></i> 試し読み制限<span class="text-gray-500 text-xs">(任意)</span>
+        </h2>
+        <label class="flex items-center gap-2 text-sm md:text-base">
+          <span>無料で読めるページ数</span>
+          <input type="number" name="preview-limit" placeholder="制限なし" min="1" max="209" class="w-28 px-2 py-1 border border-gray-300 rounded-lg text-right">
+        </label>
+        <p class="text-xs text-gray-500 mt-2">空欄なら全209ページ閲覧可。数値を入れるとそこまで読んだら購入導線が出ます。</p>
+      </section>
+
+      <!-- Title -->
+      <section class="bg-white border border-gray-200 rounded-2xl p-4 md:p-5 shadow-sm">
+        <h2 class="font-bold text-gray-800 mb-3 flex items-center gap-2">
+          <i class="fas fa-heading text-yellow-500"></i> タイトル
+        </h2>
+        <input type="text" name="title" value="ブラックジャックによろしく 第1巻" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm md:text-base">
+      </section>
+
+      <!-- Submit -->
+      <div class="sticky bottom-3 md:bottom-6 pt-4 text-center">
+        <button type="submit"
+          class="inline-flex items-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold px-6 md:px-8 py-3 md:py-4 rounded-full transition text-sm md:text-base shadow-lg">
+          <i class="fas fa-play"></i>
+          ビューアを開く
+        </button>
+      </div>
+    </form>
+
+    <!-- Footer credit -->
+    <p class="text-center text-xs text-gray-500 mt-8">
+      漫画素材: 佐藤秀峰「ブラックジャックによろしく」第1巻 ／
+      <a href="https://densho810.com/free/" target="_blank" rel="noopener" class="underline hover:text-gray-700">二次利用フリー規約</a>に基づき使用
+    </p>
+  </main>
+
+  <!-- ────── Viewer screen (toggled via body.is-viewer) ────── -->
+  <div class="viewer-screen">
+    <div id="viewer"></div>
+    <div class="demo-credit">
+      「ブラックジャックによろしく」佐藤秀峰 ／
+      <a href="https://densho810.com/free/" target="_blank" rel="noopener">二次利用フリー規約</a>
+    </div>
+  </div>
+
+  <script type="module">
+    import MangaViewer, { icons } from '../src/manga-viewer.js?v=0.5.0';
+
     const totalPages = 209;
     const pages = [];
     for (let i = 1; i <= totalPages; i++) {
       pages.push(`pages/page-${String(i).padStart(3, '0')}.jpg`);
     }
 
-    const viewer = new MangaViewer({
-      container: '#viewer',
-      pages: pages,
-      direction: 'rtl',
-      firstPageSingle: true,
-      viewMode: 'page',
-      title: 'ブラックジャックによろしく 第1巻',
-      backUrl: '/article/manga-viewer',
-      shareUrl: 'https://github.com/tokagemushi999/manga-viewer',
-      storageKey: 'manga_viewer_bjyk_vol1',
-      loadingText: '読み込み中...',
-      bookmarks: true,
-      bookmarkId: 'bjyk-vol1',
+    const form = document.getElementById('config-form');
+    const STORAGE_KEY = 'manga_viewer_demo_config_v1';
+    const VIEW_STATE_KEY = 'manga_viewer_demo_in_viewer';
+    let viewer = null;
 
-      // ─── v0.4.0 customization options (uncomment to try) ───
-      //
-      // Force a specific palette regardless of viewport size.
-      //   theme: 'dark',     // black background even on mobile
-      //   theme: 'light',    // white background even on desktop
-      //
-      // Hide standard buttons by name. Recognised:
-      //   'back', 'bookmark', 'fullscreen', 'share', 'copy', 'help',
-      //   'zoomIn', 'zoomReset'
-      //   hideButtons: ['share', 'copy'],
-      //
-      // Inject custom buttons. `icon` accepts HTMLElement, DocumentFragment,
-      // or an inline SVG string (sanitized). `icons.reload` is supplied by
-      // the library — see the import line above.
-      //   extraButtons: [{
-      //     slot: 'header',
-      //     icon: icons.reload,
-      //     label: '更新',
-      //     onClick: () => location.reload(),
-      //   }],
-      //
-      // Extra space below the slider — useful when overlaying credits or
-      // your own UI. Equivalent to `--mv-footer-bottom-padding` CSS var.
-      //   footerBottomPadding: 28,
-      //
-      // Override any UI string. Defaults are Japanese; supply English
-      // (or any locale) for the keys you want to replace.
-      //   messages: {
-      //     resumeTitle: 'Resume reading?',
-      //     resumeStart: 'Start over',
-      //     resumeContinue: ' Resume',
-      //   },
+    // ── Persist form state ─────────────────────────────────
+    restoreConfig();
+    form.addEventListener('input', saveConfig);
+    form.addEventListener('change', saveConfig);
+
+    function saveConfig() {
+      try {
+        const fd = new FormData(form);
+        const obj = {};
+        for (const [k, v] of fd.entries()) {
+          // Multiple-value keys aren't used in this form, so plain assignment is fine.
+          obj[k] = v;
+        }
+        // Capture unchecked checkboxes too (FormData skips them).
+        form.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+          obj['__cb_' + el.name] = el.checked;
+        });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+      } catch (_) { /* quota / private mode */ }
+    }
+
+    function restoreConfig() {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch (_) {}
+      if (!saved) return;
+      // Apply checkbox states
+      form.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+        const key = '__cb_' + el.name;
+        if (key in saved) el.checked = !!saved[key];
+      });
+      // Apply text/number/radio
+      Object.entries(saved).forEach(([k, v]) => {
+        if (k.startsWith('__cb_')) return;
+        const inputs = form.querySelectorAll(`[name="${k}"]`);
+        inputs.forEach((el) => {
+          if (el.type === 'radio') el.checked = (el.value === v);
+          else if (el.type !== 'checkbox') el.value = v;
+        });
+      });
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      openViewer(readConfig());
     });
+
+    // Re-enter the viewer automatically if the user reloaded while reading
+    // (e.g. by tapping the in-header "更新" button). Set in openViewer,
+    // cleared by closeViewer.
+    if (sessionStorage.getItem(VIEW_STATE_KEY) === '1') {
+      // Wait for restoreConfig to finish (it ran above synchronously).
+      openViewer(readConfig());
+    }
+
+    function readConfig() {
+      const fd = new FormData(form);
+      const hideButtons = [];
+      if (!fd.get('show-back'))       hideButtons.push('back');
+      if (!fd.get('show-bookmark'))   hideButtons.push('bookmark');
+      if (!fd.get('show-fullscreen')) hideButtons.push('fullscreen');
+      if (!fd.get('show-share'))      hideButtons.push('share');
+      if (!fd.get('show-copy'))       hideButtons.push('copy');
+      if (!fd.get('show-help'))       hideButtons.push('help');
+
+      const extraButtons = [];
+      if (fd.get('extra-reload')) {
+        extraButtons.push({
+          icon: icons.reload,
+          label: '更新',
+          onClick: () => location.reload(),
+        });
+      }
+
+      const previewRaw = fd.get('preview-limit');
+      const previewLimit = previewRaw ? Number(previewRaw) || null : null;
+
+      // Convert visual right/left choices into direction-relative start/end.
+      const direction = fd.get('direction');
+      const visualAlign = fd.get('last-align') || 'center';
+      let lastPageAlign = 'center';
+      if (visualAlign === 'rtl-right') {
+        lastPageAlign = direction === 'rtl' ? 'start' : 'end';
+      } else if (visualAlign === 'rtl-left') {
+        lastPageAlign = direction === 'rtl' ? 'end' : 'start';
+      }
+
+      return {
+        theme:           fd.get('theme'),
+        direction,
+        firstPageSingle: !!fd.get('first-single'),
+        title:           fd.get('title') || '',
+        footerPad:       Number(fd.get('footer-pad')) || 0,
+        lastPageAlign,
+        hideButtons,
+        extraButtons,
+        previewLimit,
+      };
+    }
+
+    function openViewer(cfg) {
+      sessionStorage.setItem(VIEW_STATE_KEY, '1');
+      document.body.classList.add('is-viewer');
+      viewer = new MangaViewer({
+        container:           '#viewer',
+        pages:               pages,
+        direction:           cfg.direction,
+        firstPageSingle:     cfg.firstPageSingle,
+        viewMode:            'page',
+        title:               cfg.title,
+        shareUrl:            'https://github.com/tokagemushi999/manga-viewer',
+        storageKey:          'manga_viewer_demo_configurator',
+        loadingText:         '読み込み中…',
+        bookmarks:           true,
+        bookmarkId:          'demo-configurator',
+        theme:               cfg.theme,
+        hideButtons:         cfg.hideButtons,
+        extraButtons:        cfg.extraButtons,
+        footerBottomPadding: cfg.footerPad,
+        lastPageAlign:       cfg.lastPageAlign,
+        onBack:              () => closeViewer(),
+        previewLimit:        cfg.previewLimit,
+        purchaseUrl:         'https://github.com/tokagemushi999/manga-viewer',
+        purchasePrice:       'GitHub で続きを見る',
+      });
+
+      // Purchase popup's "戻る" link still uses backUrl, so keep the hijack
+      // for that one until the popup grows its own callback support.
+      const host = document.getElementById('viewer');
+      const root = host && host.shadowRoot;
+      if (root) {
+        root.addEventListener('click', (e) => {
+          const a = e.target.closest && e.target.closest('.mv-purchase-back');
+          if (a) {
+            e.preventDefault(); e.stopPropagation();
+            closeViewer();
+          }
+        }, true);
+      }
+    }
+
+    function closeViewer() {
+      sessionStorage.removeItem(VIEW_STATE_KEY);
+      if (viewer) {
+        try { viewer.destroy(); } catch (_) {}
+        viewer = null;
+      }
+      // Reset host so a fresh shadow root attaches next time.
+      const host = document.getElementById('viewer');
+      const fresh = host.cloneNode(false);
+      host.parentNode.replaceChild(fresh, host);
+      document.body.classList.remove('is-viewer');
+    }
   </script>
 </body>
 </html>
