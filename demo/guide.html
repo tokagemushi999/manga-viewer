@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#FDFBF7">
+  <title>Manga Viewer 使い方ガイド — ぷれぐら！</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.tailwindcss.com">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&family=Dela+Gothic+One&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { fontFamily: { sans: ['Zen Maru Gothic','sans-serif'], display: ['Dela Gothic One','cursive'] } } }
+    };
+  </script>
+  <style>
+    body { font-family: 'Zen Maru Gothic', sans-serif; background:#FDFBF7; }
+    .font-display { font-family: 'Dela Gothic One', cursive; }
+    pre[class*="language-"] {
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      margin: 0.75rem 0;
+    }
+    code[class*="language-"] { font-family: 'SFMono-Regular', Consolas, 'Courier New', monospace; }
+    .anchor:target { scroll-margin-top: 80px; }
+    table.opt th, table.opt td { padding: 6px 10px; vertical-align: top; }
+    table.opt th { background: #f9f4ea; text-align: left; font-weight: 700; }
+    table.opt code { background: #f4ecd8; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+    .toc a { color: #d97706; }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body class="text-gray-800">
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div class="max-w-4xl mx-auto px-4 md:px-6 py-3 md:py-4 flex justify-between items-center">
+      <a href="/" class="font-display text-lg md:text-xl text-gray-800">
+        ぷれぐら！<span class="text-yellow-400">PLAYGROUND</span>
+      </a>
+      <a href="/lab/manga-viewer/demo/" class="text-gray-600 hover:text-gray-800 font-bold text-xs md:text-sm">
+        <i class="fas fa-rocket mr-1"></i>デモへ
+      </a>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-4 md:px-6 py-8 md:py-12">
+
+    <!-- Hero -->
+    <div class="mb-8 md:mb-10">
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <span class="bg-orange-500 text-white text-xs md:text-sm font-bold px-2 md:px-3 py-1 rounded-full">GUIDE</span>
+        <span class="bg-gray-200 text-gray-700 text-xs md:text-sm font-bold px-2 md:px-3 py-1 rounded-full">v0.5.0</span>
+      </div>
+      <h1 class="font-bold text-2xl md:text-4xl text-gray-800 leading-snug mb-3">Manga Viewer 使い方ガイド</h1>
+      <p class="text-gray-600 text-sm md:text-base">
+        依存ゼロのWeb漫画ビューア。コピペ1ブロックで導入できます。本ガイドでは最小起動から全オプション、よくあるレシピまでを一気に把握できる構成にしています。
+      </p>
+    </div>
+
+    <!-- TOC -->
+    <nav class="toc bg-white border border-gray-200 rounded-2xl p-5 mb-8 shadow-sm">
+      <h2 class="font-bold mb-3 flex items-center gap-2"><i class="fas fa-list text-yellow-500"></i> 目次</h2>
+      <ul class="text-sm space-y-1">
+        <li><a href="#quickstart">1. 5分で始める</a></li>
+        <li><a href="#options">2. 全オプション一覧</a></li>
+        <li><a href="#recipes">3. よくあるレシピ</a></li>
+        <li><a href="#troubleshoot">4. トラブルシュート</a></li>
+        <li><a href="#links">5. リンク</a></li>
+      </ul>
+    </nav>
+
+    <!-- 1. Quickstart -->
+    <section id="quickstart" class="anchor mb-10">
+      <h2 class="font-bold text-xl md:text-2xl mb-4 text-gray-800 border-b-2 border-yellow-400 pb-1">1. 5分で始める</h2>
+
+      <p class="text-sm md:text-base text-gray-700 mb-3">
+        以下を <code class="bg-gray-100 px-1 rounded">your-page.html</code> に保存して、画像を3枚 (<code>p1.jpg</code> など) 同じディレクトリに置けば、ブラウザで開くだけで動きます。
+      </p>
+
+      <pre class="language-html"><code>&lt;!DOCTYPE html&gt;
+&lt;html lang="ja"&gt;
+&lt;head&gt;
+  &lt;meta charset="UTF-8"&gt;
+  &lt;meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div id="viewer"&gt;&lt;/div&gt;
+
+  &lt;script type="module"&gt;
+    import MangaViewer from 'https://cdn.jsdelivr.net/npm/@tokagemushi/manga-viewer@0.5.0/src/manga-viewer.js';
+
+    new MangaViewer({
+      container: '#viewer',
+      pages: ['p1.jpg', 'p2.jpg', 'p3.jpg'],
+      direction: 'rtl',           // 右綴じ（日本の漫画）
+      title: 'サンプル漫画',
+    });
+  &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+      <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 md:p-4 rounded text-sm">
+        <strong>📝 メモ:</strong> CSS は viewer が Shadow DOM 内に自動展開するため、<code>&lt;link rel="stylesheet"&gt;</code> は不要です。
+      </div>
+    </section>
+
+    <!-- 2. Options -->
+    <section id="options" class="anchor mb-10">
+      <h2 class="font-bold text-xl md:text-2xl mb-4 text-gray-800 border-b-2 border-yellow-400 pb-1">2. 全オプション一覧</h2>
+
+      <div class="overflow-x-auto -mx-4 md:mx-0">
+        <table class="opt min-w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+          <thead><tr><th>オプション</th><th>型</th><th>既定値</th><th>説明</th></tr></thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr><td><code>container</code></td><td><code>string \| HTMLElement</code></td><td><code>'#viewer'</code></td><td>マウント先</td></tr>
+            <tr><td><code>pages</code></td><td><code>Array</code></td><td><code>[]</code></td><td>画像URLまたはページオブジェクト</td></tr>
+            <tr><td><code>direction</code></td><td><code>'rtl'\|'ltr'</code></td><td><code>'rtl'</code></td><td>読み進める方向</td></tr>
+            <tr><td><code>firstPageSingle</code></td><td><code>boolean</code></td><td><code>true</code></td><td>表紙単独表示</td></tr>
+            <tr><td><code>viewMode</code></td><td><code>'page'\|'scroll'</code></td><td><code>'page'</code></td><td>ページ送り or 縦スクロール</td></tr>
+            <tr><td><code>title</code></td><td><code>string</code></td><td><code>''</code></td><td>ヘッダー中央タイトル</td></tr>
+            <tr><td><code>backUrl</code></td><td><code>string</code></td><td><code>'/'</code></td><td>戻るボタンの遷移先</td></tr>
+            <tr><td><code>onBack</code> <span class="text-orange-500 text-xs">v0.5.0</span></td><td><code>Function\|null</code></td><td><code>null</code></td><td>戻るボタン押下時の関数。指定時は backUrl 無効</td></tr>
+            <tr><td><code>shareUrl</code></td><td><code>string</code></td><td><code>''</code></td><td>X共有・URLコピー用</td></tr>
+            <tr><td><code>showHeader</code> / <code>showFooter</code></td><td><code>boolean</code></td><td><code>true</code></td><td>ヘッダー・フッター全体の表示</td></tr>
+            <tr><td><code>loadingText</code></td><td><code>string</code></td><td><code>'読み込み中…'</code></td><td>ローディング画面の文言</td></tr>
+            <tr><td><code>bookmarks</code></td><td><code>boolean</code></td><td><code>true</code></td><td>しおり機能の有効化</td></tr>
+            <tr><td><code>bookmarkId</code></td><td><code>string</code></td><td><code>''</code></td><td>同期用作品ID</td></tr>
+            <tr><td><code>bookmarkApi</code></td><td><code>string\|null</code></td><td><code>null</code></td><td>しおり同期APIエンドポイント</td></tr>
+            <tr><td><code>theme</code> <span class="text-orange-500 text-xs">v0.4.0</span></td><td><code>'auto'\|'light'\|'dark'</code></td><td><code>'auto'</code></td><td>テーマ</td></tr>
+            <tr><td><code>hideButtons</code> <span class="text-orange-500 text-xs">v0.4.0</span></td><td><code>string[]</code></td><td><code>[]</code></td><td>非表示にする標準ボタン名</td></tr>
+            <tr><td><code>extraButtons</code> <span class="text-orange-500 text-xs">v0.4.0</span></td><td><code>ExtraButton[]</code></td><td><code>[]</code></td><td>カスタムボタン挿入</td></tr>
+            <tr><td><code>lastPageAlign</code> <span class="text-orange-500 text-xs">v0.5.0</span></td><td><code>'center'\|'start'\|'end'</code></td><td><code>'center'</code></td><td>見開きで最終ページが余ったときの寄せ位置</td></tr>
+            <tr><td><code>footerBottomPadding</code> <span class="text-orange-500 text-xs">v0.4.0</span></td><td><code>number\|string</code></td><td><code>null</code></td><td>スライダー下の余白(px)</td></tr>
+            <tr><td><code>htmlSanitizer</code></td><td><code>Function\|null</code></td><td><code>null</code></td><td><code>type:'html'</code> ページ用カスタムサニタイザ</td></tr>
+            <tr><td><code>messages</code></td><td><code>Object\|null</code></td><td><code>null</code></td><td>UI文字列の上書き（i18n）</td></tr>
+            <tr><td><code>previewLimit</code></td><td><code>number\|null</code></td><td><code>null</code></td><td>試し読みできるページ数</td></tr>
+            <tr><td><code>purchaseUrl</code> / <code>purchasePrice</code></td><td><code>string</code></td><td><code>''</code></td><td>購入導線</td></tr>
+            <tr><td><code>adsense</code></td><td><code>{client,slot}</code></td><td><code>null</code></td><td>末尾AdSense</td></tr>
+            <tr><td><code>onPageChange</code></td><td><code>Function</code></td><td><code>null</code></td><td><code>(currentPage, totalPages) => {}</code></td></tr>
+            <tr><td><code>onComplete</code></td><td><code>Function</code></td><td><code>null</code></td><td>最終ページ到達時</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bg-white border border-gray-200 rounded-2xl p-4 mt-4 text-sm">
+        <strong>標準ボタン名（<code>hideButtons</code> で指定）:</strong><br>
+        <code>back</code> / <code>bookmark</code> / <code>fullscreen</code> / <code>share</code> / <code>copy</code> / <code>help</code> / <code>zoomIn</code> / <code>zoomReset</code>
+      </div>
+    </section>
+
+    <!-- 3. Recipes -->
+    <section id="recipes" class="anchor mb-10">
+      <h2 class="font-bold text-xl md:text-2xl mb-4 text-gray-800 border-b-2 border-yellow-400 pb-1">3. よくあるレシピ</h2>
+
+      <div class="space-y-6">
+
+        <div>
+          <h3 class="font-bold text-base mb-2">A. 日本の漫画（右綴じ・見開き）</h3>
+<pre class="language-js"><code>new MangaViewer({
+  container: '#viewer',
+  pages: [...],
+  direction: 'rtl',
+  title: '○○巻',
+});</code></pre>
+        </div>
+
+        <div>
+          <h3 class="font-bold text-base mb-2">B. 西洋コミック（左綴じ・縦スクロール）</h3>
+<pre class="language-js"><code>new MangaViewer({
+  container: '#viewer',
+  pages: [...],
+  direction: 'ltr',
+  viewMode: 'scroll',
+});</code></pre>
+        </div>
+
+        <div>
+          <h3 class="font-bold text-base mb-2">C. スマホでも黒背景</h3>
+<pre class="language-js"><code>theme: 'dark',</code></pre>
+        </div>
+
+        <div>
+          <h3 class="font-bold text-base mb-2">D. X共有・リンクコピーを消す</h3>
+<pre class="language-js"><code>hideButtons: ['share', 'copy'],</code></pre>
+        </div>
+
+        <div>
+          <h3 class="font-bold text-base mb-2">E. 更新ボタンを追加</h3>
+<pre class="language-js"><code>import MangaViewer, { icons } from '...';
+
+new MangaViewer({
+  // ...
+  extraButtons: [{
+    icon: icons.reload,
+    label: '更新',
+    onClick: () => location.reload(),
+  }],
+});</code></pre>
+        </div>
+
+        <div>
+          <h3 class="font-bold text-base mb-2">F. 戻るボタンを履歴で戻す</h3>
+<pre class="language-js"><code>onBack: () => history.back(),</code></pre>
+        </div>
+
+        <div>
+          <h3 class="font-bold text-base mb-2">G. RTLで最終ページを右寄せに</h3>
+<pre class="language-js"><code>direction: 'rtl',
+lastPageAlign: 'start',  // start = 読み始め側 = RTLでは右</code></pre>
+        </div>
+
+        <div>
+          <h3 class="font-bold text-base mb-2">H. PWAでスライダーが iOS ホームバーに被る</h3>
+          <p class="text-sm text-gray-600 mb-2">v0.5.0 から自動16px加算。さらに調整したい場合:</p>
+<pre class="language-css"><code>#viewer { --mv-pwa-footer-bonus: 24px; }</code></pre>
+        </div>
+
+        <div>
+          <h3 class="font-bold text-base mb-2">I. 試し読み制限＋購入導線</h3>
+<pre class="language-js"><code>previewLimit: 30,
+purchaseUrl: 'https://your-shop.com/buy',
+purchasePrice: '500円',</code></pre>
+        </div>
+
+        <div>
+          <h3 class="font-bold text-base mb-2">J. UI を英語化</h3>
+<pre class="language-js"><code>messages: {
+  resumeTitle: 'Resume reading?',
+  resumeStart: 'Start over',
+  resumeContinue: ' Resume',
+  helpTitle: ' Help',
+  helpSettings: '⚙ Settings',
+  helpControls: '👆 Controls',
+  bookmarkPanelTitle: 'Bookmarks',
+  // ...必要なキーだけ上書き
+},</code></pre>
+        </div>
+
+        <div>
+          <h3 class="font-bold text-base mb-2">K. CSS変数でカラー上書き</h3>
+<pre class="language-css"><code>#viewer {
+  --mv-bg: #1a1a1a;
+  --mv-fg: #f0f0f0;
+  --mv-accent: #ff6b6b;
+}</code></pre>
+          <p class="text-xs text-gray-500 mt-2">利用可能な変数: <code>--mv-bg</code>, <code>--mv-fg</code>, <code>--mv-text-muted</code>, <code>--mv-header-bg</code>, <code>--mv-footer-bg</code>, <code>--mv-btn-bg</code>, <code>--mv-btn-bg-hover</code>, <code>--mv-btn-fg</code>, <code>--mv-slider-track</code>, <code>--mv-spinner-track</code>, <code>--mv-spinner-fg</code>, <code>--mv-accent</code>, <code>--mv-shadow</code>, <code>--mv-footer-bottom-padding</code>, <code>--mv-pwa-footer-bonus</code></p>
+        </div>
+
+        <div>
+          <h3 class="font-bold text-base mb-2">L. HTML/広告ページ挿入</h3>
+<pre class="language-js"><code>pages: [
+  'p1.jpg',
+  { type: 'html', html: '&lt;div&gt;広告枠&lt;/div&gt;', backgroundColor: '#fff' },
+  'p2.jpg',
+  { type: 'adsense', client: 'ca-pub-XXX', slot: '123456' },
+],</code></pre>
+          <p class="text-xs text-gray-500 mt-2">HTML はホワイトリストサニタイザを通ります。スクリプトや危険なタグは除去されます。</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 4. Troubleshoot -->
+    <section id="troubleshoot" class="anchor mb-10">
+      <h2 class="font-bold text-xl md:text-2xl mb-4 text-gray-800 border-b-2 border-yellow-400 pb-1">4. トラブルシュート</h2>
+
+      <div class="overflow-x-auto -mx-4 md:mx-0">
+        <table class="opt min-w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+          <thead><tr><th>症状</th><th>原因</th><th>対処</th></tr></thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr><td>画面が真っ暗</td><td>JS/CSSの読み込み失敗</td><td>DevToolsコンソール / Networkタブで404を確認</td></tr>
+            <tr><td>アイコンが見切れる</td><td>v0.4.0のサニタイザバグ（修正済）</td><td>v0.5.0以上に更新</td></tr>
+            <tr><td>ヘルプ画面のフォントが違う</td><td>v0.4.0で<code>:host</code>にフォント未設定（修正済）</td><td>v0.5.0以上に更新</td></tr>
+            <tr><td>しおりが保存されない</td><td>プライベートブラウジング、localStorage容量超過</td><td>通常モードで開く / <code>bookmarkApi</code>を実装</td></tr>
+            <tr><td>iOS PWAでスライダーが触りにくい</td><td>ホーム指示子と干渉</td><td><code>--mv-pwa-footer-bonus</code>を増やす</td></tr>
+            <tr><td>画像のロードが遅い</td><td>大量URL同時読み込み</td><td>画像CDN利用（<code>loading="lazy"</code>は内部で自動付与済）</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 5. Links -->
+    <section id="links" class="anchor mb-10">
+      <h2 class="font-bold text-xl md:text-2xl mb-4 text-gray-800 border-b-2 border-yellow-400 pb-1">5. リンク</h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <a href="/lab/manga-viewer/demo/" class="flex items-center gap-3 p-4 bg-white border border-gray-200 rounded-2xl hover:bg-yellow-50 transition">
+          <i class="fas fa-rocket text-yellow-500 text-xl"></i>
+          <div><div class="font-bold">ライブデモ</div><div class="text-xs text-gray-500">設定をいじって試せます</div></div>
+        </a>
+        <a href="https://github.com/tokagemushi999/manga-viewer" target="_blank" rel="noopener" class="flex items-center gap-3 p-4 bg-white border border-gray-200 rounded-2xl hover:bg-yellow-50 transition">
+          <i class="fab fa-github text-gray-800 text-xl"></i>
+          <div><div class="font-bold">GitHub</div><div class="text-xs text-gray-500">ソースコード・Issue</div></div>
+        </a>
+        <a href="https://www.npmjs.com/package/@tokagemushi/manga-viewer" target="_blank" rel="noopener" class="flex items-center gap-3 p-4 bg-white border border-gray-200 rounded-2xl hover:bg-yellow-50 transition">
+          <i class="fab fa-npm text-red-500 text-xl"></i>
+          <div><div class="font-bold">npm</div><div class="text-xs text-gray-500">@tokagemushi/manga-viewer</div></div>
+        </a>
+        <a href="/article/manga-viewer" class="flex items-center gap-3 p-4 bg-white border border-gray-200 rounded-2xl hover:bg-yellow-50 transition">
+          <i class="fas fa-newspaper text-yellow-500 text-xl"></i>
+          <div><div class="font-bold">紹介記事</div><div class="text-xs text-gray-500">作った経緯</div></div>
+        </a>
+      </div>
+
+      <p class="text-sm text-gray-600 mt-6">
+        不具合・要望は <a href="https://github.com/tokagemushi999/manga-viewer/issues" target="_blank" rel="noopener" class="text-yellow-600 underline">GitHub Issues</a> または <a href="/contact" class="text-yellow-600 underline">お問い合わせ</a> からどうぞ。
+      </p>
+    </section>
+
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>
