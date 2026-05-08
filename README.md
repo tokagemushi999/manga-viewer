@@ -114,6 +114,7 @@
 | `messages` | `Object \| null` | `null` | UI文字列の上書き（後述）。既定値は日本語 |
 | `theme` | `'auto' \| 'light' \| 'dark'` | `'auto'` | テーマ。`auto`=画面幅で切替（既定挙動）、`light`/`dark`=強制 |
 | `hideButtons` | `string[]` | `[]` | 非表示にするボタン名（後述） |
+| `headerOrder` | `string[] \| null` | `null` | ヘッダーボタンを並び順込みで指定するホワイトリスト。指定したものだけ表示。`hideButtons` を上書き |
 | `extraButtons` | `ExtraButton[]` | `[]` | カスタムボタン挿入（後述） |
 | `footerBottomPadding` | `number \| string \| null` | `null` | フッター下余白（px）。CSS変数 `--mv-footer-bottom-padding` でも指定可 |
 | `onBack` | `Function \| null` | `null` | 戻るボタンクリック時のコールバック。指定すると `backUrl` への遷移を抑止し、この関数を実行（`() => history.back()` 等で使用） |

@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] — 2026-05-08
+
+### Added
+- **`headerOrder` option** — whitelist + ordering for standard header
+  buttons. When supplied, only the listed names render and they appear
+  in that exact order. Supersedes `hideButtons` for the listed buttons.
+  `'back'` always anchors to the left of the header; the rest fill the
+  right cluster in array order. `extraButtons` are appended after.
+  Pass `null` (default) to keep the v0.4.x behaviour.
+  Recognised names: `'back'`, `'bookmark'`, `'fullscreen'`, `'share'`,
+  `'copy'`, `'help'`.
+
 ## [0.5.0] — 2026-05-08
 
 ### Added
