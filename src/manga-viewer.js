@@ -1,5 +1,5 @@
 /**
- * Manga Viewer v0.4.0
+ * Manga Viewer v0.5.0
  * A standalone, feature-rich manga/comic viewer for the web.
  *
  * https://github.com/tokagemushi999/manga-viewer
@@ -9,20 +9,23 @@
 // ──────────────────────────────────────────
 // SVG icon paths (inline, no FA dependency)
 // ──────────────────────────────────────────
+// Material-Design solid icons. Filled paths read significantly better than
+// stroke at the 16–18px size used in header buttons. Uniform 24×24 viewBox.
+const _FILL = 'fill="currentColor" aria-hidden="true" focusable="false"';
 const ICONS = {
-  chevronLeft:  '<svg viewBox="0 0 320 512" width="14" height="14" fill="currentColor"><path d="M9.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l192 192c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L77.3 256 246.6 86.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-192 192z"/></svg>',
-  expand:       '<svg viewBox="0 0 448 512" width="14" height="14" fill="currentColor"><path d="M32 32C14.3 32 0 46.3 0 64v96c0 17.7 14.3 32 32 32s32-14.3 32-32V96h64c17.7 0 32-14.3 32-32s-14.3-32-32-32H32zM64 416H32c-17.7 0-32-14.3-32-32V288c0-17.7 14.3-32 32-32s32 14.3 32 32v64h64c17.7 0 32 14.3 32 32s-14.3 32-32 32zm320-320c17.7 0 32-14.3 32-32s-14.3-32-32-32H320c-17.7 0-32 14.3-32 32s14.3 32 32 32h64v64c0 17.7 14.3 32 32 32s32-14.3 32-32V64zM384 416h-64c-17.7 0-32 14.3-32 32s14.3 32 32 32h96c17.7 0 32-14.3 32-32V320c0-17.7-14.3-32-32-32s-32 14.3-32 32v96z"/></svg>',
-  compress:     '<svg viewBox="0 0 448 512" width="14" height="14" fill="currentColor"><path d="M160 64c0-17.7-14.3-32-32-32s-32 14.3-32 32v64H32c-17.7 0-32 14.3-32 32s14.3 32 32 32h96c17.7 0 32-14.3 32-32V64zM32 384c-17.7 0-32 14.3-32 32s14.3 32 32 32h64v64c0 17.7 14.3 32 32 32s32-14.3 32-32V384c0-17.7-14.3-32-32-32H32zM352 448h-64c-17.7 0-32 14.3-32 32v96c0 17.7 14.3 32 32 32s32-14.3 32-32v-64h64c17.7 0 32-14.3 32-32s-14.3-32-32-32zM288 160c0 17.7 14.3 32 32 32h96c17.7 0 32-14.3 32-32s-14.3-32-32-32H352V64c0-17.7-14.3-32-32-32s-32 14.3-32 32v96z"/></svg>',
-  xLogo:        '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
-  link:         '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
-  question:     '<svg viewBox="0 0 320 512" width="14" height="14" fill="currentColor"><path d="M80 160c0-35.3 28.7-64 64-64h32c35.3 0 64 28.7 64 64v3.6c0 21.8-11.1 42.1-29.4 53.8l-42.2 27.1A87.983 87.983 0 0 0 128 313v7c0 17.7 14.3 32 32 32s32-14.3 32-32v-7c0-7.4 3.6-14.3 9.6-18.5l42.2-27.1C274 237.3 272 196.2 272 163.6V160c0-70.7-57.3-128-128-128H112C41.3 32 -16 89.3-16 160c0 17.7 14.3 32 32 32s32-14.3 32-32zm80 320a40 40 0 1 0 0-80 40 40 0 1 0 0 80z"/></svg>',
-  bookmark:     '<svg viewBox="0 0 384 512" width="14" height="14" fill="currentColor"><path d="M0 48V487.7C0 501.1 10.9 512 24.3 512c5 0 9.9-1.5 14-4.4L192 400 345.7 507.6c4.1 2.9 9 4.4 14 4.4 13.4 0 24.3-10.9 24.3-24.3V48c0-26.5-21.5-48-48-48H48C21.5 0 0 21.5 0 48z"/></svg>',
-  searchPlus:   '<svg viewBox="0 0 512 512" width="18" height="18" fill="currentColor"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM184 296c0 13.3 10.7 24 24 24s24-10.7 24-24V232h64c13.3 0 24-10.7 24-24s-10.7-24-24-24H232V120c0-13.3-10.7-24-24-24s-24 10.7-24 24v64H120c-13.3 0-24 10.7-24 24s10.7 24 24 24h64v64z"/></svg>',
-  compressAlt:  '<svg viewBox="0 0 512 512" width="18" height="18" fill="currentColor"><path d="M456 224H312c-13.3 0-24-10.7-24-24V56c0-9.7 5.8-18.5 14.8-22.2s19.3-1.7 26.2 5.2l40 40L442.3 5.7C454.8-6.8 475.2-6.8 487.7 5.7s12.5 32.8 0 45.3L414.4 124.3l40 40c6.9 6.9 8.9 17.2 5.2 26.2s-12.5 14.8-22.2 14.8zm0 64c9.7 0 18.5 5.8 22.2 14.8s1.7 19.3-5.2 26.2l-40 40 73.4 73.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L387.6 414.4l-40 40c-6.9 6.9-17.2 8.9-26.2 5.2s-14.8-12.5-14.8-22.2V312c0-13.3 10.7-24 24-24H456zM56 224c-9.7 0-18.5-5.8-22.2-14.8s-1.7-19.3 5.2-26.2l40-40L5.7 69.7C-6.8 57.2-6.8 36.8 5.7 24.3s32.8-12.5 45.3 0l73.4 73.4 40-40c6.9-6.9 17.2-8.9 26.2-5.2s14.8 12.5 14.8 22.2V200c0 13.3-10.7 24-24 24H56zm0 64H200c13.3 0 24 10.7 24 24V456c0 9.7-5.8 18.5-14.8 22.2s-19.3 1.7-26.2-5.2l-40-40L69.7 506.3C57.2 518.8 36.8 518.8 24.3 506.3s-12.5-32.8 0-45.3l73.4-73.4-40-40c-6.9-6.9-8.9-17.2-5.2-26.2S46.3 288 56 288z"/></svg>',
-  check:        '<svg viewBox="0 0 512 512" width="14" height="14" fill="currentColor"><path d="M470.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L192 338.7 425.4 105.4c12.5-12.5 32.8-12.5 45.3 0z"/></svg>',
-  questionCircle:'<svg viewBox="0 0 512 512" width="18" height="18" fill="currentColor"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM169.8 165.3c7.9-22.3 29.1-37.3 52.8-37.3h58.3c34.9 0 63.1 28.3 63.1 63.1c0 22.6-12.1 43.5-31.7 54.8L280 264.4c-.2 13-10.9 23.6-24 23.6c-13.3 0-24-10.7-24-24V250.5c0-8.6 4.6-16.5 12.1-20.8l44.3-25.4c4.7-2.7 7.6-7.7 7.6-13.1c0-8.4-6.8-15.1-15.1-15.1H222.6c-3.4 0-6.4 2.1-7.5 5.3l-.4 1.2c-4.4 12.5-18.2 19-30.6 14.6s-19-18.2-14.6-30.6l.4-1.2zM224 352a32 32 0 1 1 64 0 32 32 0 1 1 -64 0z"/></svg>',
-  times:        '<svg viewBox="0 0 384 512" width="14" height="14" fill="currentColor"><path d="M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3l105.4 105.3c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256l105.3-105.4z"/></svg>',
-  play:         '<svg viewBox="0 0 384 512" width="14" height="14" fill="currentColor"><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.8 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>',
+  chevronLeft:   `<svg viewBox="0 0 24 24" width="18" height="18" ${_FILL}><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>`,
+  expand:        `<svg viewBox="0 0 24 24" width="18" height="18" ${_FILL}><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`,
+  compress:      `<svg viewBox="0 0 24 24" width="18" height="18" ${_FILL}><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>`,
+  xLogo:         `<svg viewBox="0 0 24 24" width="16" height="16" ${_FILL}><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`,
+  link:          `<svg viewBox="0 0 24 24" width="18" height="18" ${_FILL}><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>`,
+  question:      `<svg viewBox="0 0 24 24" width="18" height="18" ${_FILL}><path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/></svg>`,
+  bookmark:      `<svg viewBox="0 0 24 24" width="18" height="18" ${_FILL}><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>`,
+  searchPlus:    `<svg viewBox="0 0 24 24" width="20" height="20" ${_FILL}><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zm-.5-7H8v2H6v1h2v2h1v-2h2V9H9z"/></svg>`,
+  compressAlt:   `<svg viewBox="0 0 24 24" width="20" height="20" ${_FILL}><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7z"/></svg>`,
+  check:         `<svg viewBox="0 0 24 24" width="16" height="16" ${_FILL}><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`,
+  questionCircle:`<svg viewBox="0 0 24 24" width="20" height="20" ${_FILL}><path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/></svg>`,
+  times:         `<svg viewBox="0 0 24 24" width="16" height="16" ${_FILL}><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`,
+  play:          `<svg viewBox="0 0 24 24" width="14" height="14" ${_FILL}><path d="M8 5v14l11-7z"/></svg>`,
 };
 
 // ──────────────────────────────────────────
@@ -32,9 +35,11 @@ const ICONS = {
 // All strings pass through the built-in SVG sanitizer at render time.
 // ──────────────────────────────────────────
 export const icons = {
-  reload:  '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>',
-  download:'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
-  print:   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
+  // Material Design "refresh". Path bounds verified at x=4–20, y=4–20
+  // (4-unit margin on every side of the 24×24 viewBox, no overflow).
+  reload:  '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true" focusable="false"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>',
+  download:'<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true" focusable="false"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>',
+  print:   '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true" focusable="false"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>',
 };
 icons.refresh = icons.reload;     // alias
 
@@ -160,9 +165,13 @@ const SANITIZE_TAG_ATTRS = {
   colgroup: new Set(['span']),
   time: new Set(['datetime']),
   abbr: new Set([]),
-  // SVG presentational attributes. `xlink:href` is intentionally NOT in
-  // <use>'s set so external icon references can't be loaded.
-  svg: new Set(['viewBox','xmlns','width','height','fill','stroke','preserveAspectRatio','focusable','aria-hidden']),
+  // SVG presentational attributes. Keys are LOWERCASE because the sanitizer
+  // lowercases attr.name before lookup; SVG camelCase attributes like
+  // `viewBox` / `preserveAspectRatio` would otherwise fall through and be
+  // stripped — which silently broke icon rendering until v0.5.0.
+  // `xlink:href` is intentionally NOT in <use>'s set so external icon
+  // references can't be loaded.
+  svg: new Set(['viewbox','xmlns','width','height','fill','stroke','preserveaspectratio','focusable','aria-hidden']),
   g: new Set(['transform','fill','stroke','opacity','clip-path','mask']),
   path: new Set(['d','fill','stroke','stroke-width','stroke-linecap','stroke-linejoin','stroke-miterlimit','stroke-dasharray','stroke-dashoffset','opacity','transform','clip-path','fill-rule','clip-rule','vector-effect']),
   circle: new Set(['cx','cy','r','fill','stroke','stroke-width','opacity','transform']),
@@ -174,13 +183,13 @@ const SANITIZE_TAG_ATTRS = {
   text: new Set(['x','y','dx','dy','text-anchor','fill','font-size','font-family','transform']),
   tspan: new Set(['x','y','dx','dy','text-anchor','fill','font-size']),
   use: new Set(['href','x','y','width','height','transform']),       // href guarded to '#fragment' below
-  symbol: new Set(['viewBox','id']),
+  symbol: new Set(['viewbox','id']),
   defs: new Set([]),
-  lineargradient: new Set(['id','x1','y1','x2','y2','gradientUnits','gradientTransform','spreadMethod']),
-  radialgradient: new Set(['id','cx','cy','r','fx','fy','gradientUnits','gradientTransform','spreadMethod']),
+  lineargradient: new Set(['id','x1','y1','x2','y2','gradientunits','gradienttransform','spreadmethod']),
+  radialgradient: new Set(['id','cx','cy','r','fx','fy','gradientunits','gradienttransform','spreadmethod']),
   stop: new Set(['offset','stop-color','stop-opacity']),
-  clippath: new Set(['id','clipPathUnits']),
-  mask: new Set(['id','x','y','width','height','maskUnits','maskContentUnits']),
+  clippath: new Set(['id','clippathunits']),
+  mask: new Set(['id','x','y','width','height','maskunits','maskcontentunits']),
 };
 // Match URL schemes we trust on href/src/action attributes.
 const SAFE_URL_RE = /^(?:(?:https?|mailto|tel|sms):|#|\/|\.\.?\/|data:image\/(?:png|jpe?g|gif|webp|svg\+xml);)/i;
@@ -194,7 +203,7 @@ const DANGEROUS_STYLE_RE = /(?:expression\s*\(|url\s*\(|@import|behaviou?r\s*:|j
 // internal classes; the CSS must be inlined here.)
 // ──────────────────────────────────────────
 const MANGA_VIEWER_CSS = String.raw`/**
- * Manga Viewer v0.4.0
+ * Manga Viewer v0.5.0
  * https://github.com/tokagemushi999/manga-viewer
  * (c) tokagemushi — MIT License
  */
@@ -213,6 +222,13 @@ const MANGA_VIEWER_CSS = String.raw`/**
 
 /* Default = dark palette. */
 :host {
+  /* Pop-friendly Japanese font stack. Defined on :host so every node in
+     Shadow DOM (help overlay, resume dialog, toasts) inherits it, not
+     just .mv-container. */
+  font-family: var(--mv-font-family,
+    'Zen Maru Gothic', 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN',
+    'Hiragino Sans', 'Yu Gothic', YuGothic, 'Meiryo',
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
   --mv-bg:                 #000;
   --mv-fg:                 #fff;
   --mv-text-muted:         rgba(255, 255, 255, 0.7);
@@ -227,6 +243,17 @@ const MANGA_VIEWER_CSS = String.raw`/**
   --mv-accent:             #facc15;
   --mv-shadow:             rgba(0, 0, 0, 0.3);
   --mv-footer-bottom-padding: 0px;
+  --mv-pwa-footer-bonus: 0px;          /* extra footer padding when running as PWA */
+}
+
+/* When the viewer runs in a PWA / installed app context (iOS/Android home
+   screen launch), the slider sits very close to the home indicator and
+   feels cramped. Add a bonus padding that callers can tune via the
+   \`--mv-pwa-footer-bonus\` variable on the host. */
+@media all and (display-mode: standalone) {
+  :host {
+    --mv-pwa-footer-bonus: 16px;
+  }
 }
 
 /* Light palette overrides. */
@@ -245,9 +272,10 @@ const MANGA_VIEWER_CSS = String.raw`/**
 }
 
 /* Auto mode mirrors viewport size — same behaviour as v0.3.x.
-   Skipped when explicit theme class is present. */
+   \`:host\` here is fine because explicit \`.mv-theme-light/dark\` class
+   selectors below have higher specificity and override on mobile too. */
 @media (max-width: 768px) {
-  :host(.mv-theme-auto), :host(:not([class*="mv-theme-"])) {
+  :host {
     --mv-bg:               #fff;
     --mv-fg:               #333;
     --mv-text-muted:       rgba(0, 0, 0, 0.5);
@@ -260,6 +288,21 @@ const MANGA_VIEWER_CSS = String.raw`/**
     --mv-spinner-track:    rgba(100, 100, 100, 0.2);
     --mv-spinner-fg:       #666;
   }
+}
+
+/* Forced dark always wins, even on mobile. */
+:host(.mv-theme-dark) {
+  --mv-bg:                 #000;
+  --mv-fg:                 #fff;
+  --mv-text-muted:         rgba(255, 255, 255, 0.7);
+  --mv-header-bg:          rgba(40, 40, 40, 0.95);
+  --mv-footer-bg:          rgba(40, 40, 40, 0.95);
+  --mv-btn-bg:             rgba(255, 255, 255, 0.08);
+  --mv-btn-bg-hover:       rgba(255, 255, 255, 0.15);
+  --mv-btn-fg:             rgba(255, 255, 255, 0.9);
+  --mv-slider-track:       rgba(255, 255, 255, 0.2);
+  --mv-spinner-track:      rgba(250, 204, 21, 0.2);
+  --mv-spinner-fg:         #facc15;
 }
 
 /* ===== Reset / Base ===== */
@@ -319,7 +362,6 @@ const MANGA_VIEWER_CSS = String.raw`/**
   height: 100vh;
   height: 100dvh;
   background: var(--mv-bg);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
   color: var(--mv-fg);
   -webkit-text-size-adjust: 100%;
@@ -393,15 +435,29 @@ body.mv-pseudo-fullscreen-body {
 }
 
 .mv-title {
+  /* Absolutely centered so the visual centre matches the viewport centre,
+     even when the back button and the right-side button cluster have
+     different widths. pointer-events stay on the buttons behind it. */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   color: var(--mv-fg);
   font-weight: bold;
   font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
-  text-align: center;
-  margin: 0 12px;
+  max-width: 50%;
+  pointer-events: none;
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  /* On phone widths the right-side cluster of buttons can squeeze the
+     title; cap it harder so it just truncates with ellipsis instead of
+     overlapping. */
+  .mv-title { max-width: 40%; }
 }
 
 .mv-header-buttons {
@@ -452,7 +508,7 @@ body.mv-pseudo-fullscreen-body {
   left: 0;
   right: 0;
   padding: 8px 12px;
-  padding-bottom: calc(max(8px, env(safe-area-inset-bottom)) + var(--mv-footer-bottom-padding));
+  padding-bottom: calc(max(8px, env(safe-area-inset-bottom)) + var(--mv-footer-bottom-padding) + var(--mv-pwa-footer-bonus));
   z-index: 50;
   background: var(--mv-footer-bg);
   opacity: 1;
@@ -462,7 +518,7 @@ body.mv-pseudo-fullscreen-body {
 @media (max-width: 768px) {
   .mv-footer {
     padding: 10px 16px 16px 16px;
-    padding-bottom: calc(max(16px, calc(env(safe-area-inset-bottom) + 8px)) + var(--mv-footer-bottom-padding));
+    padding-bottom: calc(max(16px, calc(env(safe-area-inset-bottom) + 8px)) + var(--mv-footer-bottom-padding) + var(--mv-pwa-footer-bonus));
   }
 }
 
@@ -1416,18 +1472,19 @@ function escapeHtml(text) {
 }
 
 function _svgIcon(svgString) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(svgString, 'image/svg+xml');
-  if (doc.querySelector('parsererror')) return document.createDocumentFragment();
-  const svg = doc.documentElement;
-  if (!svg || svg.nodeName.toLowerCase() !== 'svg') return document.createDocumentFragment();
-  svg.querySelectorAll('script').forEach((node) => node.remove());
-  [svg, ...svg.querySelectorAll('*')].forEach((node) => {
+  // Use a <template> so the browser parses <svg> with the right namespace.
+  // DOMParser('image/svg+xml') + importNode used to work but is flaky in
+  // some Safari versions when the result is appended into Shadow DOM.
+  const tpl = document.createElement('template');
+  tpl.innerHTML = String(svgString || '').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
+  const svg = tpl.content.querySelector('svg');
+  if (!svg) return document.createDocumentFragment();
+  svg.querySelectorAll('*').forEach((node) => {
     for (const attr of Array.from(node.attributes)) {
       if (/^on/i.test(attr.name)) node.removeAttribute(attr.name);
     }
   });
-  return document.importNode(svg, true);
+  return svg;
 }
 
 /** Create an element with attributes/listeners and append children. */
@@ -1650,6 +1707,8 @@ export default class MangaViewer {
       hideButtons: [],
       extraButtons: [],
       footerBottomPadding: null,
+      onBack: null,
+      lastPageAlign: 'center',
     }, options);
 
     if (!['auto', 'light', 'dark'].includes(o.theme)) {
@@ -1966,8 +2025,18 @@ export default class MangaViewer {
     const o = this.opts;
     const header = el('div', { className: 'mv-header' });
 
-    // Back button
-    const backBtn = el('a', { href: o.backUrl, className: 'mv-header-btn', title: 'Back' }, _svgIcon(ICONS.chevronLeft));
+    // Back button.
+    // - If `opts.onBack` is a function, the button stops navigation and calls it.
+    //   Useful for `history.back()` or "return to landing page" scenarios.
+    // - Otherwise the button navigates to `opts.backUrl` like in v0.4.x.
+    const backHref = (typeof o.onBack === 'function') ? '#' : o.backUrl;
+    const backBtn = el('a', { href: backHref, className: 'mv-header-btn', title: 'Back', 'aria-label': 'Back' }, _svgIcon(ICONS.chevronLeft));
+    if (typeof o.onBack === 'function') {
+      backBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        try { o.onBack(e, this); } catch (_) {}
+      });
+    }
     if (!this._isHidden('back')) header.appendChild(backBtn);
 
     // Title
@@ -2096,7 +2165,16 @@ export default class MangaViewer {
           this._slots.push({ pages: [i, i + 1], spread: true });
           i += 2;
         } else {
-          this._slots.push({ pages: [i], spread: false });
+          // Orphan last page in spread mode. Position depends on lastPageAlign:
+          //   'center' (default v0.4.x compat) — single, centered slot
+          //   'start' — pair with blank on the reading-end side (so page sits at reading start)
+          //   'end'   — pair with blank on the reading-start side (so page sits at reading end)
+          const align = this.opts.lastPageAlign;
+          if (align === 'start' || align === 'end') {
+            this._slots.push({ pages: [i], spread: true, hasBlank: true, blankAlign: align });
+          } else {
+            this._slots.push({ pages: [i], spread: false });
+          }
           i++;
         }
       }
@@ -2131,8 +2209,19 @@ export default class MangaViewer {
 
       if (slot.hasBlank) {
         const blank = el('div', { className: 'mv-blank-page', 'aria-hidden': 'true' });
-        if (dir === 'rtl') pageNodes.unshift(blank);
-        else pageNodes.push(blank);
+        // Cover slot keeps the v0.2.x convention. Orphan last-page slots
+        // honour `lastPageAlign`:
+        //   'start' → page at reading-start side (RTL=right, LTR=left)
+        //   'end'   → page at reading-end side (RTL=left, LTR=right)
+        if (slot.blankAlign === 'start') {
+          pageNodes.push(blank);
+        } else if (slot.blankAlign === 'end') {
+          pageNodes.unshift(blank);
+        } else if (dir === 'rtl') {
+          pageNodes.unshift(blank);
+        } else {
+          pageNodes.push(blank);
+        }
       }
 
       pageNodes.forEach(node => zoomEl.appendChild(node));
