@@ -184,6 +184,20 @@ export interface MangaViewerOptions {
    * - `'end'`: page at reading-end side of the spread (RTL=left, LTR=right).
    */
   lastPageAlign?: 'center' | 'start' | 'end';
+  /**
+   * Whitelist + ordering for standard header buttons. When supplied,
+   * only the listed names are rendered (in that exact order); names not
+   * in the array are hidden. This option supersedes `hideButtons` for
+   * the listed buttons. Recognised names:
+   * `'back' | 'bookmark' | 'fullscreen' | 'share' | 'copy' | 'help'`.
+   * `'back'` always anchors to the left of the header; other listed
+   * names go into the right cluster in the order given. `extraButtons`
+   * are always appended after the standard buttons in the right cluster.
+   *
+   * Pass `null` (default) to use the v0.4.x default order combined with
+   * `hideButtons` for removals.
+   */
+  headerOrder?: string[] | null;
 }
 
 export interface ExtraButton {

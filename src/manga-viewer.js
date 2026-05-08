@@ -1,5 +1,5 @@
 /**
- * Manga Viewer v0.5.0
+ * Manga Viewer v0.5.1
  * A standalone, feature-rich manga/comic viewer for the web.
  *
  * https://github.com/tokagemushi999/manga-viewer
@@ -203,7 +203,7 @@ const DANGEROUS_STYLE_RE = /(?:expression\s*\(|url\s*\(|@import|behaviou?r\s*:|j
 // internal classes; the CSS must be inlined here.)
 // ──────────────────────────────────────────
 const MANGA_VIEWER_CSS = String.raw`/**
- * Manga Viewer v0.5.0
+ * Manga Viewer v0.5.1
  * https://github.com/tokagemushi999/manga-viewer
  * (c) tokagemushi — MIT License
  */
@@ -1709,6 +1709,7 @@ export default class MangaViewer {
       footerBottomPadding: null,
       onBack: null,
       lastPageAlign: 'center',
+      headerOrder: null,
     }, options);
 
     if (!['auto', 'light', 'dark'].includes(o.theme)) {
@@ -2025,54 +2026,71 @@ export default class MangaViewer {
     const o = this.opts;
     const header = el('div', { className: 'mv-header' });
 
-    // Back button.
-    // - If `opts.onBack` is a function, the button stops navigation and calls it.
-    //   Useful for `history.back()` or "return to landing page" scenarios.
-    // - Otherwise the button navigates to `opts.backUrl` like in v0.4.x.
-    const backHref = (typeof o.onBack === 'function') ? '#' : o.backUrl;
-    const backBtn = el('a', { href: backHref, className: 'mv-header-btn', title: 'Back', 'aria-label': 'Back' }, _svgIcon(ICONS.chevronLeft));
-    if (typeof o.onBack === 'function') {
-      backBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        try { o.onBack(e, this); } catch (_) {}
-      });
-    }
-    if (!this._isHidden('back')) header.appendChild(backBtn);
+    // Builder map. Keys are the recognised standard button names. Each
+    // builder returns a fresh DOM node (or null if the button shouldn't
+    // be created at all — e.g. bookmarks disabled).
+    const builders = {
+      back: () => {
+        // - opts.onBack as a function intercepts the click and skips backUrl.
+        // - Otherwise the button navigates to opts.backUrl like in v0.4.x.
+        const backHref = (typeof o.onBack === 'function') ? '#' : o.backUrl;
+        const btn = el('a', { href: backHref, className: 'mv-header-btn', title: 'Back', 'aria-label': 'Back' }, _svgIcon(ICONS.chevronLeft));
+        if (typeof o.onBack === 'function') {
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            try { o.onBack(e, this); } catch (_) {}
+          });
+        }
+        return btn;
+      },
+      bookmark: () => {
+        if (!o.bookmarks) return null;
+        this._bookmarkBtn = el('button', { className: 'mv-header-btn mv-bookmark-btn', title: this._msg.bookmarkBtnTitle, 'aria-label': this._msg.bookmarkBtnTitle }, _svgIcon(ICONS.bookmark));
+        return this._bookmarkBtn;
+      },
+      fullscreen: () => {
+        this._fullscreenBtn = el('button', { className: 'mv-header-btn mv-pc-only', title: 'Fullscreen', onClick: () => this._toggleFullscreen() }, _svgIcon(ICONS.expand));
+        return this._fullscreenBtn;
+      },
+      share: () => el('button', { className: 'mv-header-btn', title: 'Share on X', onClick: () => this._shareToX() }, _svgIcon(ICONS.xLogo)),
+      copy:  () => el('button', { className: 'mv-header-btn', title: 'Copy link', onClick: () => this._copyLink() }, _svgIcon(ICONS.link)),
+      help:  () => el('button', { className: 'mv-header-btn', title: this._msg.helpBtnTitle, 'aria-label': this._msg.helpBtnTitle, onClick: () => this._showHelp() }, _svgIcon(ICONS.question)),
+    };
 
-    // Title
+    // Resolve the order. With opts.headerOrder set, only buttons whose
+    // names appear in the array are rendered, in that exact order
+    // (whitelist mode). Without it we fall back to the v0.4.x default
+    // ordering plus opts.hideButtons removals.
+    const explicit = Array.isArray(o.headerOrder) ? o.headerOrder : null;
+    const desiredOrder = explicit
+      ? explicit.filter((name) => Object.prototype.hasOwnProperty.call(builders, name))
+      : ['back', 'bookmark', 'fullscreen', 'share', 'copy', 'help']
+          .filter((name) => !this._isHidden(name));
+
+    // Back stays on the left of the title; other buttons land in the
+    // right cluster. Conventional reader layout.
+    const rightCluster = el('div', { className: 'mv-header-buttons' });
+    let backRendered = false;
+    for (const name of desiredOrder) {
+      const node = builders[name] && builders[name]();
+      if (!node) continue;
+      if (name === 'back' && !backRendered) {
+        header.appendChild(node);
+        backRendered = true;
+      } else {
+        rightCluster.appendChild(node);
+      }
+    }
+
+    // Title goes between back and right cluster regardless of layout choice.
     const title = el('h1', { className: 'mv-title' }, o.title);
     header.appendChild(title);
 
-    // Right buttons
-    const btns = el('div', { className: 'mv-header-buttons' });
+    // Caller-supplied custom buttons (header slot) — always go after the
+    // standard buttons in the right cluster, regardless of headerOrder.
+    this._appendExtraButtons(rightCluster, 'header');
 
-    // Bookmark
-    this._bookmarkBtn = el('button', { className: 'mv-header-btn mv-bookmark-btn', title: this._msg.bookmarkBtnTitle, 'aria-label': this._msg.bookmarkBtnTitle }, _svgIcon(ICONS.bookmark));
-    if (this.opts.bookmarks && !this._isHidden('bookmark')) btns.appendChild(this._bookmarkBtn);
-
-    // Fullscreen (PC only)
-    this._fullscreenBtn = el('button', { className: 'mv-header-btn mv-pc-only', title: 'Fullscreen', onClick: () => this._toggleFullscreen() }, _svgIcon(ICONS.expand));
-    if (!this._isHidden('fullscreen')) btns.appendChild(this._fullscreenBtn);
-
-    // Share to X
-    if (!this._isHidden('share')) {
-      btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Share on X', onClick: () => this._shareToX() }, _svgIcon(ICONS.xLogo)));
-    }
-
-    // Copy link
-    if (!this._isHidden('copy')) {
-      btns.appendChild(el('button', { className: 'mv-header-btn', title: 'Copy link', onClick: () => this._copyLink() }, _svgIcon(ICONS.link)));
-    }
-
-    // Help
-    if (!this._isHidden('help')) {
-      btns.appendChild(el('button', { className: 'mv-header-btn', title: this._msg.helpBtnTitle, 'aria-label': this._msg.helpBtnTitle, onClick: () => this._showHelp() }, _svgIcon(ICONS.question)));
-    }
-
-    // Caller-supplied custom buttons (header slot)
-    this._appendExtraButtons(btns, 'header');
-
-    header.appendChild(btns);
+    header.appendChild(rightCluster);
     return header;
   }
 
