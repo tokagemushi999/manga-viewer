@@ -4,6 +4,47 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — 2026-05-08
+
+### Breaking changes
+- **`hideButtons`, `extraButtons`, `headerOrder` are removed.** A single
+  `headerButtons` option replaces all three. Mixed array of standard
+  button names (strings) and custom button definitions (objects). Order
+  in the array maps 1:1 to display order; names not in the array are
+  hidden.
+
+      // v0.5.x
+      hideButtons: ['share', 'copy'],
+      extraButtons: [{ icon: icons.reload, label: '更新', onClick: ... }],
+
+      // v0.6.0
+      headerButtons: [
+        'back',
+        'bookmark',
+        { icon: icons.reload, label: '更新', onClick: ... },
+        'help',
+      ],
+
+  Pass `headerButtons: null` (default) for the v0.5.x default lineup.
+- The `'zoomIn'` / `'zoomReset'` names that previously worked in
+  `hideButtons` are gone — the zoom HUD is always shown. (No real-world
+  use of hiding it has been reported.)
+- The `extraButtons` `slot: 'footer'` option is gone. Custom buttons
+  only land in the header now; the footer is reserved for the page
+  slider and indicator.
+
+### Why
+Three options to express "what buttons appear" was confusing. One mixed
+array (string-or-object) is the cleanest mental model: "headerButtons
+is exactly what's in the header, in this order".
+
+### Migration
+- `hideButtons: [name, ...]` → list every name you DO want in
+  `headerButtons` (or omit the option to use the default).
+- `extraButtons: [obj, ...]` (header slot) → drop the objects into
+  `headerButtons` at whatever position you want.
+- `headerOrder` → the same array is `headerButtons` now.
+
 ## [0.5.1] — 2026-05-08
 
 ### Added

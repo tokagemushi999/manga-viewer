@@ -113,9 +113,7 @@
 | `htmlSanitizer` | `Function \| null` | `null` | `type:'html'` 用のサニタイザ。未指定時は組み込みのホワイトリスト方式を使用。`DOMPurify.sanitize` を渡すとさらに安全 |
 | `messages` | `Object \| null` | `null` | UI文字列の上書き（後述）。既定値は日本語 |
 | `theme` | `'auto' \| 'light' \| 'dark'` | `'auto'` | テーマ。`auto`=画面幅で切替（既定挙動）、`light`/`dark`=強制 |
-| `hideButtons` | `string[]` | `[]` | 非表示にするボタン名（後述） |
-| `headerOrder` | `string[] \| null` | `null` | ヘッダーボタンを並び順込みで指定するホワイトリスト。指定したものだけ表示。`hideButtons` を上書き |
-| `extraButtons` | `ExtraButton[]` | `[]` | カスタムボタン挿入（後述） |
+| `headerButtons` | `Array<string \| HeaderButton> \| null` | `null` | ヘッダーボタンの並び・表示・カスタム追加を1配列で指定（後述） |
 | `footerBottomPadding` | `number \| string \| null` | `null` | フッター下余白（px）。CSS変数 `--mv-footer-bottom-padding` でも指定可 |
 | `onBack` | `Function \| null` | `null` | 戻るボタンクリック時のコールバック。指定すると `backUrl` への遷移を抑止し、この関数を実行（`() => history.back()` 等で使用） |
 | `lastPageAlign` | `'center' \| 'start' \| 'end'` | `'center'` | 見開きで最終ページが奇数で余ったときの寄せ位置。`'start'`=読み始め側（RTL→右、LTR→左）、`'end'`=読み終わり側 |
