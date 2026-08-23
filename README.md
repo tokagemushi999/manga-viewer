@@ -28,6 +28,34 @@
 
 ---
 
+## 🛠 設置・カスタマイズのご依頼（有償）
+
+「自分のサイトに置きたいけれど、組み込みで手が止まっている」という方向けに、設置とカスタマイズを承っています。
+
+- **設置代行** — あなたのサイトにビューアを組み込み、実際に読める状態までお渡しします
+- **見た目の調整** — 配色・ヘッダーのボタン構成・フォントをサイトに合わせます
+- **本棚ページ** — 作品一覧から各話へ飛ぶページの作成
+- **収益化** — Google AdSense の挿入設定（広告収益はそのままあなたのものです）
+- **作品追加の手順書** — 次からご自身で追加できるように、手順をまとめてお渡しします
+
+料金は内容によりますが **15,000円〜** が目安です。
+Issue か [tokagemushi.jp](https://tokagemushi.jp) から、サイトのURLとやりたいことをお知らせください。概算をお返しします。
+
+> ライブラリ自体は MIT ライセンスのままです。**ご自身で組み込む場合は完全に無料**で、これまで通り自由にお使いいただけます。
+
+### Need help setting it up?
+
+The library is MIT — **free to use on your own**, always.
+
+If you'd rather have it done for you, I offer paid setup: integration into your site,
+styling to match your design, a bookshelf/index page, AdSense placement, and a short
+guide so you can add new works yourself.
+
+Starting around ¥15,000. Open an Issue or reach me at
+[tokagemushi.jp](https://tokagemushi.jp) with your site URL and what you'd like.
+
+---
+
 ## ✅ 主な機能
 
 - **右綴じ / 左綴じ** 両対応
