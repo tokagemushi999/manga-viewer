@@ -4,7 +4,10 @@
 
 日本の漫画の読み方（右綴じ・横向き時の見開き）を前提に作っていますが、設定でどんなコミック形式にも対応できます。
 
-<!-- [Live Demo](https://tokagemushi.jp/lab/manga-viewer) -->
+### 🔗 [Live Demo — 「ブラックジャックによろしく」第1巻（全209ページ）](https://tokagemushi.jp/lab/manga-viewer/)
+
+右綴じ・見開き・ピンチズーム・しおり・続きから読む、実際の挙動をそのまま試せます。
+（デモの漫画は[二次利用フリー規約](https://densho810.com/free/)に基づき使用しています）
 
 ---
 
