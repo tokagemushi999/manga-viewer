@@ -9,7 +9,9 @@
 <body>
 <div id="viewer"></div>
 <script type="module">
-import MangaViewer from '../src/manga-viewer.js?v=curl2';
+// Dev harness: always fetch the current module. A fixed cache-buster silently
+// pins the page to whatever was published when that string was last changed.
+const { default: MangaViewer } = await import('../src/manga-viewer.js?v=' + Date.now());
 const q = new URLSearchParams(location.search);
 const pages = Array.from({ length: 10 }, (_, i) =>
   `pages/page-${String(i + 1).padStart(3, '0')}.jpg`);
