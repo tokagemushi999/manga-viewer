@@ -8,7 +8,7 @@
 <body>
 <div id="viewer"></div>
 <script type="module">
-import MangaViewer from '../src/manga-viewer.js';
+import MangaViewer from '../src/manga-viewer.js?v=curl2';
 const q = new URLSearchParams(location.search);
 const pages = Array.from({ length: 10 }, (_, i) =>
   `pages/page-${String(i + 1).padStart(3, '0')}.jpg`);
