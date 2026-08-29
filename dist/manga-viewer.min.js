@@ -1977,12 +1977,12 @@ class CurlTransition {
     this._forward = goingForward;
     // Where along the free edge the sheet was taken hold of — this is what
     // makes a corner grip crease diagonally and a mid-edge grip crease square.
-    // Paper is taken by a corner, not by the middle of an edge — which is why
-    // dragging straight sideways still creases the sheet diagonally. Pick the
-    // free corner nearest the finger, exactly as a hand would.
+    // The sheet is taken exactly where the finger landed on the free edge, not
+    // snapped to a corner: hold it near a corner and it creases steeply, hold
+    // it mid-edge and the fold runs nearly straight. The diagonal still comes
+    // out on its own, because the grip has to travel along an arc.
     const grip = this._toSheet(v._startX, v._startY);
-    const aspect = this._sheetAspect();
-    this._gripY = grip[1] > aspect / 2 ? aspect : 0;
+    this._gripY = grip[1];
     this._active = true;
     this._pendingTarget = to;
     this._show();
@@ -2105,12 +2105,19 @@ class CurlTransition {
       return;
     }
 
-    // Arc of the corner about the spine. Half a turn puts it on the far side.
+    // Arc of the grip about the spine. Half a turn puts it on the far side.
     const phi = Math.acos(Math.max(-1, Math.min(1, 1 - pulled)));
-    // A corner from the lower half swings up through the page, and vice versa,
-    // so the sheet always turns across the reader rather than off-screen.
-    const dir = gy < aspect / 2 ? 1 : -1;
-    const moved = [Math.cos(phi), gy + dir * Math.sin(phi)];
+    // How far the grip sits from the middle of the free edge. Taking the sheet
+    // by its middle lets it bend symmetrically, so the fold stays square to the
+    // spine; taking it near a corner bends it lopsidedly and the fold leans.
+    // Without this the crease would come out at the same angle wherever the
+    // page was held, which is exactly what it must not do.
+    const half = aspect / 2 || 1;
+    const offCentre = Math.min(1, Math.abs(gy - half) / half);
+    // A grip below the middle swings up through the page, and vice versa, so
+    // the sheet always turns across the reader rather than off-screen.
+    const dir = gy < half ? 1 : -1;
+    const moved = [Math.cos(phi), gy + dir * Math.sin(phi) * offCentre];
 
     const dx = corner[0] - moved[0];
     const dy = corner[1] - moved[1];
@@ -2406,11 +2413,15 @@ class CurlTransition {
     return [(r || 0) / 255, (g || 0) / 255, (b || 0) / 255];
   }
 
-  /** Paper colour for the reverse of the sheet, keyed off the page background. */
+  /**
+   * Paper colour for the reverse of the sheet. Paper is pale whatever the room
+   * is like, so a dark page background only takes the edge off it — matching
+   * the background outright turns the back of the sheet into a grey slab.
+   */
   _paperRGB() {
     const [r, g, b] = this._bgRGB();
     const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-    return lum > 0.5 ? [0.95, 0.94, 0.92] : [0.17, 0.17, 0.18];
+    return lum > 0.5 ? [0.95, 0.94, 0.92] : [0.80, 0.79, 0.77];
   }
 
   _draw() {
