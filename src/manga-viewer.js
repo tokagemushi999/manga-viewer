@@ -2052,6 +2052,16 @@ class CurlTransition {
     });
   }
 
+  /**
+   * Cylinder radius in sheet space. The constant is given per screen width, so
+   * a spread's half-width leaf has to scale it up — otherwise the same paper
+   * would bend half as much simply because the page is narrower.
+   */
+  _radius() {
+    const w = (this._rectTop && this._rectTop.w) || 1;
+    return Math.min(0.3, CURL_RADIUS / w);
+  }
+
   /** Height / width of the turning sheet, in screen units. */
   _sheetAspect() {
     const v = this._v;
@@ -2134,7 +2144,7 @@ class CurlTransition {
     const midX = (corner[0] + moved[0]) / 2;
     const midY = (corner[1] + moved[1]) / 2;
     this._axisD = midX * this._axisN[0] + midY * this._axisN[1]
-      - (Math.PI * CURL_RADIUS) / 2;
+      - (Math.PI * this._radius()) / 2;
   }
 
   _stopAnim() {
@@ -2440,7 +2450,7 @@ class CurlTransition {
 
     const flip = this._v.opts.direction === 'rtl' ? 1 : 0;
     const paper = this._paperRGB();
-    gl.uniform1f(this._loc.r, CURL_RADIUS);
+    gl.uniform1f(this._loc.r, this._radius());
     gl.uniform1f(this._loc.flip, flip);
     gl.uniform1f(this._loc.aspect, this._sheetAspect());
     gl.uniform3f(this._loc.paper, paper[0], paper[1], paper[2]);
@@ -2456,8 +2466,15 @@ class CurlTransition {
 
     // The shadow falls under the raised edge of the sheet — the crest of the
     // cylinder — not under the crease, which the paper itself covers.
-    const crest = this._axisD + CURL_RADIUS;
-    const crestScreen = flip ? 1 - crest : crest;
+    //
+    // The crease lives in sheet space, where 1 is the width of the *sheet*.
+    // On a single page that happens to equal the screen, but in a spread the
+    // sheet is only half of it, so the position has to be mapped through the
+    // sheet's own rectangle before other surfaces can be told where to darken.
+    const crestSheet = this._axisD + this._radius();
+    const alongSheet = flip ? 1 - crestSheet : crestSheet;
+    const sheetRect = this._rectTop || FULL_RECT;
+    const crestScreen = sheetRect.x + alongSheet * (sheetRect.w || 1);
 
     // 1. The page underneath, flat, wearing the sheet's shadow. Its shadow is
     //    expressed in that page's own texture space, so convert the position.
