@@ -195,6 +195,23 @@ export interface MangaViewerOptions {
    * - `'end'`: page at reading-end side of the spread (RTL=left, LTR=right).
    */
   lastPageAlign?: 'center' | 'start' | 'end';
+
+  /**
+   * How one page gives way to the next.
+   *
+   * - `'slide'` (default) — the pages move sideways as one track.
+   * - `'curl'` — the top sheet bends around a cylinder and turns like paper,
+   *   drawn with WebGL. In a spread only the leaf on the free side lifts, and
+   *   the axis runs down the gutter.
+   *
+   * `'curl'` falls back to `'slide'` on its own, per gesture, whenever it
+   * cannot draw honestly: no WebGL, a zoomed-in page, scroll mode, or a slot
+   * holding something other than images (an ad, the purchase page, custom
+   * HTML). Nothing needs to be configured for that.
+   *
+   * @default 'slide'
+   */
+  pageTransition?: 'slide' | 'curl';
 }
 
 /** Custom button definition usable inside `headerButtons`. */

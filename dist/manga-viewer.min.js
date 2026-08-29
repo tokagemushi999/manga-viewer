@@ -775,6 +775,28 @@ body.mv-pseudo-fullscreen-body {
   flex-direction: row-reverse;
 }
 
+/* ===== Page Curl =====
+   The curl canvas draws both the settling sheet and the page beneath it, so
+   while it is visible the DOM track underneath must be hidden — otherwise the
+   real <img> shows through wherever the canvas draws background. */
+.mv-curl-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
+  pointer-events: none;
+  display: none;
+}
+
+.mv-curl-canvas.mv-curl-visible {
+  display: block;
+}
+
+.mv-slot-track.mv-curl-covered {
+  visibility: hidden;
+}
+
 /* ===== Tap Areas ===== */
 .mv-tap-area {
   position: absolute;
@@ -1511,6 +1533,900 @@ function el(tag, attrs = {}, children = []) {
 // ──────────────────────────────────────────
 // Bookmark Manager
 // ──────────────────────────────────────────
+/* ────────────────────────────────────────────────────────────────────────────
+ * Page transitions
+ *
+ * A transition owns *how* one slot gives way to the next. The viewer owns
+ * *which* slot is current — a transition never touches `_currentSlotIndex`.
+ *
+ * Finger-driven:  beginDrag() → dragTo(offset) × n → commitDrag(v) | cancelDrag()
+ * Button-driven:  run(from, to, animate)
+ *
+ * `dragTo` receives the raw pixel offset rather than a 0..1 progress so that
+ * a transition which tracks the finger literally (slide) stays exact; ones
+ * that need a ratio derive it from the container width themselves.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/**
+ * The original behaviour: the whole track of pages moves sideways as one.
+ * Every other transition is measured against this one — it must stay the
+ * cheapest and the most forgiving.
+ */
+class SlideTransition {
+  constructor(viewer) {
+    this._v = viewer;
+  }
+
+  get name() { return 'slide'; }
+
+  /** Sliding is valid in every state the viewer can reach. */
+  canRun() { return true; }
+
+  beginDrag() {
+    this._v._slotTrack.classList.add('mv-no-transition');
+  }
+
+  dragTo(offset) {
+    this._v._offsetX = offset;
+    this._v._updateTrackPosition(false);
+  }
+
+  commitDrag() { return this._settle(); }
+
+  cancelDrag() { return this._settle(); }
+
+  run(from, to, animate = true) {
+    this._v._updateTrackPosition(animate);
+    return Promise.resolve();
+  }
+
+  _settle() {
+    const v = this._v;
+    v._offsetX = 0;
+    v._slotTrack.classList.remove('mv-no-transition');
+    v._updateTrackPosition(true);
+    return Promise.resolve();
+  }
+
+  destroy() {}
+}
+
+/* ── Curl ──────────────────────────────────────────────────────────────────
+ * The sheet is treated as a plane wrapped around a cylinder: flat up to the
+ * axis, bent around it, then flat again on the way back. One model gives the
+ * shape, the shading, the show-through and the shadow — see the design note.
+ *
+ * Everything is computed in "sheet space", where x = 0 is the bound edge and
+ * x = 1 is the free edge the finger pulls. RTL just mirrors that on the way
+ * out, so the maths never has to know which way the book opens.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+const CURL_RADIUS = 0.11;      // cylinder radius, in page widths — the stiffness of the paper
+const CURL_MESH = 36;          // grid resolution across the sheet
+const CURL_PAPER_MIX = 0.07;   // how much paper tint sits over the printing on the reverse
+const CURL_BLEED = 0.12;       // single page: how much of the front shows through the back
+const CURL_PERSPECTIVE = 0.025; // how much the lifted paper grows toward the reader — paper must not look elastic
+const CURL_TURN_REACH = 2.0;   // sheet widths of pull that lay the page flat against the spine
+const CURL_SHADOW = 0.42;      // shadow the sheet casts on the page below
+const CURL_SETTLE_MS = 300;    // release → finished, when the flick carries no speed
+const CURL_MIN_SETTLE_MS = 130;
+const CURL_MAX_DPR = 2;
+
+const FULL_UV = { x: 0, y: 0, w: 1, h: 1 };
+/** A crease that never bites: used by the passes that draw a flat page. */
+const FLAT_AXIS = [1, 0];
+const FULL_RECT = { x: 0, y: 0, w: 1, h: 1 };
+
+/**
+ * Convert a position given in screen units into the texture coordinates of a
+ * pass, so a shadow cast on screen lands in the right place on each surface.
+ * Returns -1 when the position falls outside the pass, which disables it.
+ */
+function shadowIn(rect, uvRect, screenX) {
+  if (!rect || rect.w <= 0) return -1;
+  const t = (screenX - rect.x) / rect.w;
+  return uvRect.x + t * uvRect.w;
+}
+
+const CURL_VERT = `
+precision highp float;
+attribute vec2 a_pos;
+uniform vec2 u_axisN;     // unit normal of the crease, pointing at the side that lifts
+uniform float u_axisD;    // signed offset of the crease along that normal
+uniform float u_r;        // cylinder radius
+uniform float u_aspect;   // sheet height / width, so a diagonal crease keeps its angle
+uniform float u_flip;     // 1.0 when the book is bound on the right
+uniform vec4 u_rect;      // where the sheet sits on screen: x, y, w, h in clip-space 0..1
+uniform vec4 u_uvRect;    // which part of the texture this pass draws
+uniform vec4 u_backUv;    // which part of the back texture the reverse carries
+uniform float u_zbase;    // depth of the flat sheet; the lift subtracts from it
+uniform float u_persp;    // fake perspective: how much lifted paper grows
+varying vec2 v_uv;
+varying vec2 v_uvBack;
+varying float v_back;
+varying float v_shade;
+
+const float PI = 3.14159265;
+
+void main() {
+  v_uv = u_uvRect.xy + vec2(a_pos.x, 1.0 - a_pos.y) * u_uvRect.zw;
+
+  // Sheet space: x = 0 at the bound edge, 1 at the free edge. Scaling y by the
+  // aspect ratio is what lets the crease sit at the angle the finger drew,
+  // instead of being skewed by the page being taller than it is wide.
+  vec2 p = vec2((u_flip > 0.5) ? (1.0 - a_pos.x) : a_pos.x, a_pos.y * u_aspect);
+
+  float s = dot(p, u_axisN) - u_axisD;
+  vec2 disp = vec2(0.0);
+  float lift = 0.0;
+  vec3 nrm = vec3(0.0, 0.0, 1.0);
+  float back = 0.0;
+
+  if (s > 0.0) {
+    float theta = s / u_r;
+    if (theta < PI) {
+      // Wrapped around the cylinder lying along the crease.
+      disp = -u_axisN * (s - u_r * sin(theta));
+      lift = u_r * (1.0 - cos(theta));
+      nrm = vec3(-u_axisN * sin(theta), cos(theta));
+      back = step(PI * 0.5, theta);
+    } else {
+      // Past the half turn: flat again, face down, lying back over the sheet.
+      disp = -u_axisN * (2.0 * s - PI * u_r);
+      lift = 2.0 * u_r;
+      nrm = vec3(0.0, 0.0, -1.0);
+      back = 1.0;
+    }
+  }
+
+  vec2 q = p + disp;
+  float sheetX = q.x;
+  float sheetY = q.y / u_aspect;
+
+  // Light from the upper left. abs(): both faces of a sheet catch it, and the
+  // reverse is fractionally darker because it faces away from the room.
+  vec3 N = normalize(vec3((u_flip > 0.5) ? -nrm.x : nrm.x, nrm.y, nrm.z));
+  vec3 L = normalize(vec3(-0.35, 0.22, 1.0));
+  v_shade = (0.56 + 0.44 * abs(dot(N, L))) * (back > 0.5 ? 0.93 : 1.0);
+  v_back = back;
+
+  float outX = (u_flip > 0.5) ? (1.0 - sheetX) : sheetX;
+
+  // A hint of perspective: paper lifted toward the reader reads as slightly
+  // taller. Without it the turn looks like a flat cut-out sliding around.
+  float grow = 1.0 + (lift / (2.0 * u_r)) * u_persp;
+  float outY = (sheetY - 0.5) * grow + 0.5;
+  vec2 pos = u_rect.xy + vec2(outX, outY) * u_rect.zw;
+
+  // The reverse carries the next page, and that page is printed on the paper —
+  // so it is fixed to the sheet's own coordinates, not to where the sheet
+  // happens to be on screen. Sampling by screen position instead makes the
+  // lookup drift into the neighbouring page while the sheet is still on its
+  // way over. p.x runs 0 at the spine to 1 at the free edge, which is exactly
+  // how the printing sits once the sheet has come to rest.
+  v_uvBack = u_backUv.xy + vec2(p.x, 1.0 - a_pos.y) * u_backUv.zw;
+
+  // Depth, not draw order, decides what covers what: the further the paper is
+  // lifted off the page, the nearer it is to the reader.
+  float depth = u_zbase - (lift / (2.0 * u_r)) * 0.6;
+  gl_Position = vec4(pos * 2.0 - 1.0, depth, 1.0);
+}
+`;
+
+const CURL_FRAG = `
+precision highp float;
+uniform sampler2D u_tex;
+uniform sampler2D u_texBack;
+uniform vec3 u_paper;
+uniform float u_paperMix;
+uniform float u_bleed;
+uniform float u_backMode;   // 1 = the reverse carries the next page; 0 = bare paper
+uniform float u_shadowAt;        // axis position in screen u; < 0 disables
+uniform float u_shadowStrength;
+varying vec2 v_uv;
+varying vec2 v_uvBack;
+varying float v_back;
+varying float v_shade;
+
+void main() {
+  vec3 c;
+  if (v_back > 0.5) {
+    if (u_backMode > 0.5) {
+      // In a spread the sheet falls onto the facing half, so its reverse is
+      // genuinely the next page — printed, not hinted at.
+      c = mix(texture2D(u_texBack, v_uvBack).rgb, u_paper, u_paperMix);
+    } else {
+      // On a single page the sheet turns out past the edge of the screen, so
+      // whatever is printed on its back leaves with it. What the reader can
+      // actually see is paper, with the front showing faintly through.
+      c = mix(u_paper, texture2D(u_tex, v_uv).rgb, u_bleed);
+    }
+  } else {
+    c = texture2D(u_tex, v_uv).rgb;
+  }
+
+  float shade = v_shade;
+  if (u_shadowStrength > 0.0 && u_shadowAt >= 0.0) {
+    float dist = abs(v_uv.x - u_shadowAt);
+    shade *= 1.0 - u_shadowStrength * (1.0 - smoothstep(0.0, 0.10, dist));
+  }
+  gl_FragColor = vec4(c * shade, 1.0);
+}
+`;
+
+/**
+ * Paper-like page turn, drawn with WebGL.
+ *
+ * Degrades to {@link SlideTransition} — silently, per gesture — whenever the
+ * curl cannot be drawn honestly: no WebGL, a slot holding something that is
+ * not an image, images that have not decoded yet, or a zoomed-in view. A
+ * stuttering curl is worse than a clean slide.
+ */
+class CurlTransition {
+  constructor(viewer) {
+    this._v = viewer;
+    this._fallback = new SlideTransition(viewer);
+    this._delegate = null;      // slide, while it is handling the current gesture
+
+    this._canvas = null;
+    this._gl = null;
+    this._prog = null;
+    this._loc = null;
+    this._meshBuf = null;
+    this._meshIdx = null;
+    this._meshCount = 0;
+    this._quadBuf = null;
+    this._glFailed = false;
+
+    this._texTop = null;
+    this._texBottom = null;
+    this._axisN = [1, 0];
+    this._axisD = 2;
+    this._active = false;
+    // Where the grip has been dragged to, in sheet widths from where it
+    // started. The crease is derived from this, so the angle of the turn is
+    // whatever angle the finger drew.
+    this._gx = 0;
+    this._gy = 0;
+    this._gripY = 0.5;          // where along the free edge the sheet was taken hold of
+    this._raf = null;
+    this._settleFrom = 0;
+    this._settleTo = 0;
+    this._settleStart = 0;
+    this._settleMs = CURL_SETTLE_MS;
+    this._onSettled = null;
+  }
+
+  get name() { return 'curl'; }
+
+  canRun() {
+    return this._v.opts.viewMode !== 'scroll';
+  }
+
+  // ─── Gesture ───
+
+  beginDrag() {
+    this._delegate = null;
+    // A new finger during the settle takes over from where it got to, rather
+    // than snapping back and starting again.
+    if (this._raf !== null) {
+      cancelAnimationFrame(this._raf);
+      this._raf = null;
+      const done = this._onSettled;
+      this._onSettled = null;
+      if (done) done();
+    }
+    this._fallback.beginDrag();
+  }
+
+  dragTo(offset, atEdge) {
+    const v = this._v;
+    const width = v._containerWidth || 1;
+
+    // Rubber-banding at the ends has no page to turn to — let slide show it.
+    if (atEdge || this._delegate === this._fallback) {
+      this._useFallback();
+      this._fallback.dragTo(offset, atEdge);
+      return;
+    }
+
+    const target = v._slotForDrag(offset);
+    if (target === null) { this._useFallback(); this._fallback.dragTo(offset, atEdge); return; }
+
+    if (!this._active || this._pendingTarget !== target) {
+      if (!this._start(v._currentSlotIndex, target)) {
+        this._useFallback();
+        this._fallback.dragTo(offset, atEdge);
+        return;
+      }
+      this._pendingTarget = target;
+    }
+
+    // Where the grip has travelled, in sheet space. Turning back starts from
+    // a sheet already lying over the spine, so the grip begins out at reach.
+    const from = this._toSheet(v._startX, v._startY);
+    const now = this._toSheet(v._currentX, v._currentY);
+    const base = this._forward ? 0 : -CURL_TURN_REACH;
+    this._gx = base + (now[0] - from[0]);
+    this._gy = now[1] - from[1];
+    this._creaseFromGrip();
+    this._draw();
+  }
+
+  commitDrag(velocity) {
+    if (this._delegate === this._fallback || !this._active) {
+      return this._fallback.commitDrag(velocity);
+    }
+    // Finish the turn: carry the grip on in the direction it was already
+    // going, so a crease drawn at an angle stays at that angle as it falls.
+    return this._settle(this._forward ? this._reachTarget() : [0, 0], velocity);
+  }
+
+  cancelDrag() {
+    if (this._delegate === this._fallback || !this._active) {
+      return this._fallback.cancelDrag();
+    }
+    return this._settle(this._forward ? [0, 0] : this._reachTarget(), 0);
+  }
+
+  /** The grip position that has the sheet all the way over, keeping its angle. */
+  _reachTarget() {
+    const len = Math.hypot(this._gx, this._gy);
+    if (len < 1e-4) return [-CURL_TURN_REACH, 0];
+    return [this._gx / len * CURL_TURN_REACH, this._gy / len * CURL_TURN_REACH];
+  }
+
+  /** Progress of the turn, 0 to 1, for shading that grows as the sheet lifts. */
+  _turnedFraction() {
+    return Math.min(1, Math.hypot(this._gx, this._gy) / CURL_TURN_REACH);
+  }
+
+  /** Button, tap or keyboard navigation: no drag, just run the whole turn. */
+  run(from, to, animate = true) {
+    if (!animate || Math.abs(to - from) !== 1 || !this._start(from, to)) {
+      return this._fallback.run(from, to, animate);
+    }
+    // No finger to follow: take the lower corner and run a gentle diagonal,
+    // which is what a hand does when it turns a page without thinking.
+    const aspect = this._sheetAspect();
+    const reach = [-CURL_TURN_REACH, CURL_TURN_REACH * 0.16];
+    [this._gx, this._gy] = this._forward ? [0, 0] : reach;
+    this._gripY = 0;
+    this._creaseFromGrip();
+    this._draw();
+    return this._settle(this._forward ? reach : [0, 0], 0);
+  }
+
+  destroy() {
+    this._stopAnim();
+    this._releaseTextures();
+    if (this._canvas && this._canvas.parentNode) this._canvas.parentNode.removeChild(this._canvas);
+    this._canvas = null;
+    this._gl = null;
+    this._fallback.destroy();
+  }
+
+  // ─── Internals ───
+
+  _useFallback() {
+    if (this._active) this._finish();
+    this._delegate = this._fallback;
+  }
+
+  /**
+   * Prepare the two textures for a turn between two neighbouring slots.
+   * Returns false when the curl cannot be drawn — the caller falls back.
+   */
+  _start(from, to) {
+    const v = this._v;
+    if (!this.canRun() || v._currentZoom > 1) return false;
+    if (!this._ensureGL()) return false;
+
+    // Going forward, the sheet on top is the page being left behind; going
+    // back, it is the page returning from the edge. Which side the book is
+    // bound on only decides where the axis sits — not which sheet moves.
+    const goingForward = to > from;
+    const topIdx = goingForward ? from : to;
+    const bottomIdx = goingForward ? to : from;
+
+    const top = this._rasterise(topIdx);
+    if (!top) return false;
+    const bottom = this._rasterise(bottomIdx);
+    if (!bottom) return false;
+
+    this._releaseTextures();
+    this._texTop = this._upload(top.canvas);
+    this._texBottom = this._upload(bottom.canvas);
+    if (!this._texTop || !this._texBottom) { this._releaseTextures(); return false; }
+    this._rectBottom = bottom.rect;
+    this._uvBottom = FULL_UV;
+    this._rectTop = top.rect;
+    this._uvTop = FULL_UV;
+    this._fixed = null;
+
+    if (top.splitU !== null) {
+      // In a spread only one leaf lifts: the one on the free side. The other
+      // half stays put — it is still attached to the block of pages — and the
+      // axis runs down the gutter between them.
+      const rtl = v.opts.direction === 'rtl';
+      const r = top.rect;
+      const gutter = r.x + top.splitU * r.w;
+      const leftPart = { rect: { x: r.x, y: r.y, w: gutter - r.x, h: r.h },
+                         uv: { x: 0, y: 0, w: top.splitU, h: 1 } };
+      const rightPart = { rect: { x: gutter, y: r.y, w: r.x + r.w - gutter, h: r.h },
+                          uv: { x: top.splitU, y: 0, w: 1 - top.splitU, h: 1 } };
+      const sheet = rtl ? leftPart : rightPart;
+      const staying = rtl ? rightPart : leftPart;
+      this._rectTop = sheet.rect;
+      this._uvTop = sheet.uv;
+      this._fixed = staying;
+    }
+
+    // What is printed on the back of the sheet: the incoming page that ends up
+    // where the paper lands. In a spread the sheet falls onto the bound half,
+    // so its reverse carries that half of the next spread; on a single page it
+    // simply carries the next page.
+    this._backUv = FULL_UV;
+    if (bottom.splitU !== null) {
+      const rtl = v.opts.direction === 'rtl';
+      this._backUv = rtl
+        ? { x: bottom.splitU, y: 0, w: 1 - bottom.splitU, h: 1 }
+        : { x: 0, y: 0, w: bottom.splitU, h: 1 };
+    }
+
+    this._forward = goingForward;
+    // Where along the free edge the sheet was taken hold of — this is what
+    // makes a corner grip crease diagonally and a mid-edge grip crease square.
+    // Paper is taken by a corner, not by the middle of an edge — which is why
+    // dragging straight sideways still creases the sheet diagonally. Pick the
+    // free corner nearest the finger, exactly as a hand would.
+    const grip = this._toSheet(v._startX, v._startY);
+    const aspect = this._sheetAspect();
+    this._gripY = grip[1] > aspect / 2 ? aspect : 0;
+    this._active = true;
+    this._pendingTarget = to;
+    this._show();
+    return true;
+  }
+
+  _show() {
+    this._resizeCanvas();
+    this._canvas.classList.add('mv-curl-visible');
+    this._v._slotTrack.classList.add('mv-curl-covered');
+  }
+
+  _finish() {
+    this._stopAnim();
+    this._active = false;
+    this._pendingTarget = null;
+    this._releaseTextures();
+    if (this._canvas) this._canvas.classList.remove('mv-curl-visible');
+    const v = this._v;
+    if (v._destroyed) return;
+    v._slotTrack.classList.remove('mv-curl-covered');
+    // Snap the DOM track to wherever the viewer now says we are.
+    v._offsetX = 0;
+    v._slotTrack.classList.add('mv-no-transition');
+    v._updateTrackPosition(false);
+    // Restore the transition for any later slide.
+    v._trackRaf(requestAnimationFrame(() => {
+      if (!v._destroyed) v._slotTrack.classList.remove('mv-no-transition');
+    }));
+  }
+
+  _settle(to, velocity) {
+    if (!this._active) return Promise.resolve();
+    const fromG = [this._gx, this._gy];
+    const dist = Math.min(1, Math.hypot(to[0] - fromG[0], to[1] - fromG[1]) / CURL_TURN_REACH);
+    // A flick finishes faster than a slow release.
+    const speed = Math.min(3, Math.abs(velocity) / 1.2);
+    const ms = Math.max(CURL_MIN_SETTLE_MS, CURL_SETTLE_MS * dist / (1 + speed));
+
+    this._stopAnim();
+    this._settleFrom = fromG;
+    this._settleTo = to;
+    this._settleStart = performance.now();
+    this._settleMs = ms;
+
+    return new Promise((resolve) => {
+      this._onSettled = resolve;
+      const step = () => {
+        const t = Math.min(1, (performance.now() - this._settleStart) / this._settleMs);
+        // Paper does not coast to a stop — it lets go at the end.
+        const e = 1 - Math.pow(1 - t, 2.4);
+        this._gx = this._settleFrom[0] + (this._settleTo[0] - this._settleFrom[0]) * e;
+        this._gy = this._settleFrom[1] + (this._settleTo[1] - this._settleFrom[1]) * e;
+        this._creaseFromGrip();
+        this._draw();
+        if (t < 1) {
+          this._raf = requestAnimationFrame(step);
+        } else {
+          this._raf = null;
+          this._finish();
+          const done = this._onSettled;
+          this._onSettled = null;
+          if (done) done();
+        }
+      };
+      this._raf = requestAnimationFrame(step);
+    });
+  }
+
+  _stopAnim() {
+    if (this._raf !== null) {
+      cancelAnimationFrame(this._raf);
+      this._raf = null;
+    }
+    if (this._onSettled) {
+      const done = this._onSettled;
+      this._onSettled = null;
+      done();
+    }
+  }
+
+  // ─── WebGL ───
+
+  _ensureGL() {
+    if (this._gl) return true;
+    if (this._glFailed) return false;
+    const v = this._v;
+    if (!v._main) { this._glFailed = true; return false; }
+
+    const canvas = el('canvas', { className: 'mv-curl-canvas' });
+    let gl = null;
+    try {
+      const attrs = { alpha: false, antialias: true, depth: true, preserveDrawingBuffer: false };
+      gl = canvas.getContext('webgl', attrs) || canvas.getContext('experimental-webgl', attrs);
+    } catch (_) { gl = null; }
+    if (!gl) { this._glFailed = true; return false; }
+
+    const prog = this._link(gl, CURL_VERT, CURL_FRAG);
+    if (!prog) { this._glFailed = true; return false; }
+
+    this._gl = gl;
+    this._prog = prog;
+    this._canvas = canvas;
+    this._loc = {
+      pos: gl.getAttribLocation(prog, 'a_pos'),
+      axisN: gl.getUniformLocation(prog, 'u_axisN'),
+      axisD: gl.getUniformLocation(prog, 'u_axisD'),
+      aspect: gl.getUniformLocation(prog, 'u_aspect'),
+      r: gl.getUniformLocation(prog, 'u_r'),
+      flip: gl.getUniformLocation(prog, 'u_flip'),
+      rect: gl.getUniformLocation(prog, 'u_rect'),
+      tex: gl.getUniformLocation(prog, 'u_tex'),
+      paper: gl.getUniformLocation(prog, 'u_paper'),
+      paperMix: gl.getUniformLocation(prog, 'u_paperMix'),
+      bleed: gl.getUniformLocation(prog, 'u_bleed'),
+      backMode: gl.getUniformLocation(prog, 'u_backMode'),
+      texBack: gl.getUniformLocation(prog, 'u_texBack'),
+      backUv: gl.getUniformLocation(prog, 'u_backUv'),
+      shadowAt: gl.getUniformLocation(prog, 'u_shadowAt'),
+      shadowStrength: gl.getUniformLocation(prog, 'u_shadowStrength'),
+      zbase: gl.getUniformLocation(prog, 'u_zbase'),
+      persp: gl.getUniformLocation(prog, 'u_persp'),
+      uvRect: gl.getUniformLocation(prog, 'u_uvRect'),
+    };
+    this._buildMesh();
+
+    // The context can be lost on memory pressure — drop back to slide for good.
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this._glFailed = true;
+      this._gl = null;
+      if (this._active) this._finish();
+    });
+
+    v._main.appendChild(canvas);
+    return true;
+  }
+
+  _link(gl, vsSrc, fsSrc) {
+    const compile = (type, src) => {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        gl.deleteShader(sh);
+        return null;
+      }
+      return sh;
+    };
+    const vs = compile(gl.VERTEX_SHADER, vsSrc);
+    const fs = vs ? compile(gl.FRAGMENT_SHADER, fsSrc) : null;
+    if (!vs || !fs) return null;
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+    return prog;
+  }
+
+  _buildMesh() {
+    const gl = this._gl;
+    const n = CURL_MESH;
+    const verts = new Float32Array((n + 1) * (n + 1) * 2);
+    let k = 0;
+    for (let j = 0; j <= n; j++) {
+      for (let i = 0; i <= n; i++) {
+        verts[k++] = i / n;
+        verts[k++] = j / n;
+      }
+    }
+    const idx = new Uint16Array(n * n * 6);
+    let m = 0;
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        const a = j * (n + 1) + i;
+        const b = a + 1;
+        const c = a + (n + 1);
+        const d = c + 1;
+        idx[m++] = a; idx[m++] = b; idx[m++] = c;
+        idx[m++] = b; idx[m++] = d; idx[m++] = c;
+      }
+    }
+    this._meshBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._meshBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+    this._meshIdx = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this._meshIdx);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+    this._meshCount = idx.length;
+
+    this._quadBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._quadBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
+  }
+
+  _resizeCanvas() {
+    const v = this._v;
+    const rect = v._main.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, CURL_MAX_DPR);
+    const w = Math.max(1, Math.round(rect.width * dpr));
+    const h = Math.max(1, Math.round(rect.height * dpr));
+    if (this._canvas.width !== w || this._canvas.height !== h) {
+      this._canvas.width = w;
+      this._canvas.height = h;
+    }
+  }
+
+  /** Rasterise a slot exactly as it is laid out on screen. */
+  _rasterise(slotIdx) {
+    const v = this._v;
+    const slotEl = v._slotTrack.querySelector('.mv-page-slot[data-slot="' + slotIdx + '"]');
+    if (!slotEl) return null;
+    const zoomEl = slotEl.querySelector('.mv-zoom-container');
+    if (!zoomEl) return null;
+
+    // Anything that is not an image or a blank filler cannot be rasterised
+    // faithfully (ads, the purchase page, arbitrary HTML).
+    for (const child of zoomEl.children) {
+      const tag = child.tagName;
+      const isBlank = child.classList.contains('mv-blank-page');
+      if (tag !== 'IMG' && !isBlank) return null;
+    }
+
+    const imgs = zoomEl.querySelectorAll('img');
+    if (!imgs.length) return null;
+    for (const img of imgs) {
+      if (!img.complete || !img.naturalWidth) return null;
+    }
+
+    const mainRect = v._main.getBoundingClientRect();
+    const slotRect = slotEl.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, CURL_MAX_DPR);
+
+    // The sheet is the printed area — the union of the page images — not the
+    // whole viewport. Letterboxing stays behind as background.
+    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+    const boxes = [];
+    for (const img of imgs) {
+      const r = img.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return null;
+      boxes.push(r);
+      left = Math.min(left, r.left);
+      top = Math.min(top, r.top);
+      right = Math.max(right, r.right);
+      bottom = Math.max(bottom, r.bottom);
+    }
+    if (!boxes.length || right <= left || bottom <= top) return null;
+
+    const w = Math.max(1, Math.round((right - left) * dpr));
+    const h = Math.max(1, Math.round((bottom - top) * dpr));
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = this._bgColour();
+    ctx.fillRect(0, 0, w, h);
+
+    try {
+      for (let i = 0; i < imgs.length; i++) {
+        const r = boxes[i];
+        ctx.drawImage(
+          imgs[i],
+          (r.left - left) * dpr,
+          (r.top - top) * dpr,
+          r.width * dpr,
+          r.height * dpr,
+        );
+      }
+    } catch (_) {
+      // Cross-origin or otherwise untouchable image.
+      return null;
+    }
+
+    // Where that rectangle sits on screen, in clip-space 0..1 with y up.
+    // The slot itself may be scrolled off to the side, so measure against the
+    // slot's own box and not the viewport.
+    const mw = mainRect.width || 1;
+    const mh = mainRect.height || 1;
+    const rect = {
+      x: (left - slotRect.left) / mw,
+      y: 1 - (bottom - slotRect.top) / mh,
+      w: (right - left) / mw,
+      h: (bottom - top) / mh,
+    };
+
+    // Two images side by side means a spread, and the gap between them is the
+    // gutter — the axis a real page turns around. One image (including a cover
+    // paired with a blank) behaves like a single page.
+    let splitU = null;
+    if (boxes.length === 2) {
+      const ordered = [...boxes].sort((a, b) => a.left - b.left);
+      const gutter = (ordered[0].right + ordered[1].left) / 2;
+      splitU = (gutter - left) / (right - left);
+      if (!(splitU > 0.05 && splitU < 0.95)) splitU = null;
+    }
+    return { canvas: c, rect, splitU };
+  }
+
+  _upload(source) {
+    const gl = this._gl;
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    try {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    } catch (_) {
+      gl.deleteTexture(tex);
+      return null;
+    }
+    if (gl.getError() !== gl.NO_ERROR) {
+      gl.deleteTexture(tex);
+      return null;
+    }
+    return tex;
+  }
+
+  _releaseTextures() {
+    const gl = this._gl;
+    if (!gl) { this._texTop = this._texBottom = null; return; }
+    if (this._texTop) gl.deleteTexture(this._texTop);
+    if (this._texBottom) gl.deleteTexture(this._texBottom);
+    this._texTop = null;
+    this._texBottom = null;
+  }
+
+  _bgColour() {
+    const cs = getComputedStyle(this._v._main);
+    return cs.backgroundColor || '#000';
+  }
+
+  /** The page background, as a 0..1 RGB triple. */
+  _bgRGB() {
+    const m = /rgba?\(([^)]+)\)/.exec(this._bgColour());
+    if (!m) return [0, 0, 0];
+    const [r, g, b] = m[1].split(',').map(Number);
+    return [(r || 0) / 255, (g || 0) / 255, (b || 0) / 255];
+  }
+
+  /** Paper colour for the reverse of the sheet, keyed off the page background. */
+  _paperRGB() {
+    const [r, g, b] = this._bgRGB();
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    return lum > 0.5 ? [0.95, 0.94, 0.92] : [0.17, 0.17, 0.18];
+  }
+
+  _draw() {
+    const gl = this._gl;
+    if (!gl || !this._active) return;
+    this._resizeCanvas();
+
+    gl.viewport(0, 0, this._canvas.width, this._canvas.height);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    const bg = this._bgRGB();
+    gl.clearColor(bg[0], bg[1], bg[2], 1);
+    gl.clearDepth(1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.useProgram(this._prog);
+
+    const flip = this._v.opts.direction === 'rtl' ? 1 : 0;
+    const paper = this._paperRGB();
+    gl.uniform1f(this._loc.r, CURL_RADIUS);
+    gl.uniform1f(this._loc.flip, flip);
+    gl.uniform1f(this._loc.aspect, this._sheetAspect());
+    gl.uniform3f(this._loc.paper, paper[0], paper[1], paper[2]);
+    gl.uniform1f(this._loc.paperMix, CURL_PAPER_MIX);
+    gl.uniform1f(this._loc.bleed, CURL_BLEED);
+    gl.uniform1f(this._loc.backMode, this._fixed ? 1 : 0);
+    gl.uniform1f(this._loc.persp, CURL_PERSPECTIVE);
+    gl.uniform4f(this._loc.backUv, this._backUv.x, this._backUv.y, this._backUv.w, this._backUv.h);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this._texBottom);
+    gl.uniform1i(this._loc.texBack, 1);
+    gl.uniform1i(this._loc.tex, 0);
+
+    // The shadow falls under the raised edge of the sheet — the crest of the
+    // cylinder — not under the crease, which the paper itself covers.
+    const crest = this._axisD + CURL_RADIUS;
+    const crestScreen = flip ? 1 - crest : crest;
+
+    // 1. The page underneath, flat, wearing the sheet's shadow. Its shadow is
+    //    expressed in that page's own texture space, so convert the position.
+    const shadow = CURL_SHADOW * Math.min(1, this._turnedFraction() * 3);
+    this._drawPass(this._texBottom, this._rectBottom, this._uvBottom, FLAT_AXIS, 2,
+      shadowIn(this._rectBottom, this._uvBottom, crestScreen), shadow, false, 0.9);
+
+    // 2. In a spread, the leaf that is not turning — still flat, still bound,
+    //    and catching the same shadow.
+    if (this._fixed) {
+      this._drawPass(this._texTop, this._fixed.rect, this._fixed.uv, FLAT_AXIS, 2,
+        shadowIn(this._fixed.rect, this._fixed.uv, crestScreen), shadow, false, 0.7);
+    }
+
+    // 3. The sheet itself.
+    this._drawPass(this._texTop, this._rectTop, this._uvTop, this._axisN, this._axisD, -1, 0, true, 0.5);
+  }
+
+  _drawPass(tex, rect, uvRect, axisN, axisD, shadowAt, shadowStrength, curved, zbase) {
+    const gl = this._gl;
+    const L = this._loc;
+    gl.bindBuffer(gl.ARRAY_BUFFER, curved ? this._meshBuf : this._quadBuf);
+    gl.enableVertexAttribArray(L.pos);
+    gl.vertexAttribPointer(L.pos, 2, gl.FLOAT, false, 0, 0);
+    gl.uniform4f(L.rect, rect.x, rect.y, rect.w, rect.h);
+    gl.uniform4f(L.uvRect, uvRect.x, uvRect.y, uvRect.w, uvRect.h);
+    gl.uniform1f(L.zbase, zbase);
+    gl.uniform2f(L.axisN, axisN[0], axisN[1]);
+    gl.uniform1f(L.axisD, axisD);
+    gl.uniform1f(L.shadowAt, shadowAt);
+    gl.uniform1f(L.shadowStrength, shadowStrength);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    if (curved) {
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this._meshIdx);
+      gl.drawElements(gl.TRIANGLES, this._meshCount, gl.UNSIGNED_SHORT, 0);
+    } else {
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+  }
+}
+
+const PAGE_TRANSITIONS = {
+  slide: SlideTransition,
+  curl: CurlTransition,
+};
+
+/**
+ * Resolve a transition by name, falling back to slide for anything unknown.
+ * Transitions are cosmetic, so an unrecognised name degrades rather than throws.
+ * @param {string} name
+ * @param {object} viewer
+ */
+function createPageTransition(name, viewer) {
+  const Ctor = PAGE_TRANSITIONS[name] || SlideTransition;
+  return new Ctor(viewer);
+}
+
 class BookmarkManager {
   constructor(opts = {}) {
     this._api = opts.bookmarkApi || null;
@@ -1708,6 +2624,7 @@ export default class MangaViewer {
       footerBottomPadding: null,
       onBack: null,
       lastPageAlign: 'center',
+      pageTransition: 'slide',
     }, options);
 
     if (!['auto', 'light', 'dark'].includes(o.theme)) {
@@ -1777,9 +2694,14 @@ export default class MangaViewer {
     this._uiVisible = true;
     this._containerWidth = 0;
 
+    // How one page gives way to the next. See PAGE_TRANSITIONS.
+    this._transition = createPageTransition(o.pageTransition, this);
+
     // Drag / swipe
     this._isDragging = false;
     this._startX = 0;
+    this._startY = 0;
+    this._currentY = 0;
     this._currentX = 0;
     this._offsetX = 0;
     this._dragStartTime = 0;
@@ -2457,7 +3379,7 @@ export default class MangaViewer {
     }
 
     if (e.touches.length !== 1) return;
-    this._startDrag(e.touches[0].clientX);
+    this._startDrag(e.touches[0].clientX, e.touches[0].clientY);
   }
 
   _onTouchMove(e) {
@@ -2483,7 +3405,7 @@ export default class MangaViewer {
 
     if (!this._isDragging) return;
     e.preventDefault();
-    this._moveDrag(e.touches[0].clientX);
+    this._moveDrag(e.touches[0].clientX, e.touches[0].clientY);
   }
 
   _onTouchEnd(e) {
@@ -2526,7 +3448,7 @@ export default class MangaViewer {
       return;
     }
     e.preventDefault();
-    this._startDrag(e.clientX);
+    this._startDrag(e.clientX, e.clientY);
   }
 
   _onMouseMove(e) {
@@ -2537,7 +3459,7 @@ export default class MangaViewer {
     }
     if (!this._isDragging) return;
     e.preventDefault();
-    this._moveDrag(e.clientX);
+    this._moveDrag(e.clientX, e.clientY);
   }
 
   _onMouseUp() {
@@ -2633,37 +3555,52 @@ export default class MangaViewer {
   }
 
   // ─── Drag (page swipe) ───
-  _startDrag(x) {
+  _startDrag(x, y = 0) {
     this._isDragging = true;
     this._startX = x;
     this._currentX = x;
+    // Vertical position matters to transitions that bend the sheet: where the
+    // finger grips decides which way the crease runs.
+    this._startY = y;
+    this._currentY = y;
     this._offsetX = 0;
     this._dragStartTime = Date.now();
-    this._slotTrack.classList.add('mv-no-transition');
+    this._transition.beginDrag();
   }
 
-  _moveDrag(x) {
-    this._currentX = x;
-    const diff = this._currentX - this._startX;
-    const isFirst = this._currentSlotIndex === 0;
-    const isLast = this._currentSlotIndex === this._slots.length - 1;
+  /**
+   * The slot a horizontal drag of `diff` px is heading for, or null when it
+   * runs off the end of the book. Reading direction decides which way a pull
+   * advances: RTL turns forward when the finger moves right, LTR when it
+   * moves left.
+   * @param {number} diff
+   * @returns {number|null}
+   */
+  _slotForDrag(diff) {
+    if (!diff) return null;
+    const rtl = this.opts.direction === 'rtl';
+    const step = diff < 0 ? (rtl ? -1 : 1) : (rtl ? 1 : -1);
+    const target = this._currentSlotIndex + step;
+    if (target < 0 || target >= this._slots.length) return null;
+    return target;
+  }
 
-    if ((isFirst && diff > 0) || (isLast && diff < 0)) {
-      this._offsetX = diff * 0.3;
-    } else {
-      this._offsetX = diff;
-    }
-    this._updateTrackPosition(false);
+  _moveDrag(x, y = this._currentY) {
+    this._currentX = x;
+    this._currentY = y;
+    const diff = this._currentX - this._startX;
+
+    // Pulling past the first or last page meets resistance instead of a wall.
+    const atEdge = this._slotForDrag(diff) === null;
+    this._transition.dragTo(atEdge ? diff * 0.3 : diff, atEdge);
   }
 
   _endDrag() {
     if (!this._isDragging) return;
     this._isDragging = false;
-    this._slotTrack.classList.remove('mv-no-transition');
 
     if (this._currentZoom > 1) {
-      this._offsetX = 0;
-      this._updateTrackPosition(true);
+      this._transition.cancelDrag();
       return;
     }
 
@@ -2671,19 +3608,26 @@ export default class MangaViewer {
     const elapsed = Date.now() - this._dragStartTime;
     const threshold = this._containerWidth * 0.15;
     const isQuickSwipe = elapsed < 300 && Math.abs(diff) > 30;
+    // px/ms, signed the same way as the drag. Handed to the transition so a
+    // flick can carry its momentum into the settle animation.
+    const velocity = elapsed > 0 ? diff / elapsed : 0;
 
+    let target = this._currentSlotIndex;
     if (Math.abs(diff) > threshold || isQuickSwipe) {
-      if (this.opts.direction === 'rtl') {
-        if (diff < 0 && this._currentSlotIndex > 0) this._currentSlotIndex--;
-        else if (diff > 0 && this._currentSlotIndex < this._slots.length - 1) this._currentSlotIndex++;
-      } else {
-        if (diff < 0 && this._currentSlotIndex < this._slots.length - 1) this._currentSlotIndex++;
-        else if (diff > 0 && this._currentSlotIndex > 0) this._currentSlotIndex--;
-      }
+      const next = this._slotForDrag(diff);
+      if (next !== null) target = next;
     }
 
-    this._offsetX = 0;
-    this._updateTrackPosition(true);
+    if (target === this._currentSlotIndex) {
+      this._transition.cancelDrag();
+      // The page did not change, but the original code still refreshed the UI
+      // here — and consumers rely on that callback firing. Keep it.
+      this._updateUI();
+      return;
+    }
+
+    this._currentSlotIndex = target;
+    this._transition.commitDrag(velocity);
     this._updateUI();
   }
 
@@ -2710,9 +3654,9 @@ export default class MangaViewer {
     if (this._pendingTapAction) clearTimeout(this._pendingTapAction);
     this._pendingTapAction = setTimeout(() => {
       if (this.opts.direction === 'rtl') {
-        if (this._currentSlotIndex < this._slots.length - 1) { this._currentSlotIndex++; this._updateTrackPosition(true); this._updateUI(); }
+        this._navigateTo(this._currentSlotIndex + 1);
       } else {
-        if (this._currentSlotIndex > 0) { this._currentSlotIndex--; this._updateTrackPosition(true); this._updateUI(); }
+        this._navigateTo(this._currentSlotIndex - 1);
       }
     }, DOUBLE_TAP_DELAY);
   }
@@ -2758,9 +3702,9 @@ export default class MangaViewer {
     if (this._pendingTapAction) clearTimeout(this._pendingTapAction);
     this._pendingTapAction = setTimeout(() => {
       if (this.opts.direction === 'rtl') {
-        if (this._currentSlotIndex > 0) { this._currentSlotIndex--; this._updateTrackPosition(true); this._updateUI(); }
+        this._navigateTo(this._currentSlotIndex - 1);
       } else {
-        if (this._currentSlotIndex < this._slots.length - 1) { this._currentSlotIndex++; this._updateTrackPosition(true); this._updateUI(); }
+        this._navigateTo(this._currentSlotIndex + 1);
       }
     }, DOUBLE_TAP_DELAY);
   }
@@ -2833,39 +3777,57 @@ export default class MangaViewer {
   }
 
   // ─── Navigation ───
+
+  /**
+   * Move to a slot through the active transition. Out-of-range targets and
+   * targets equal to the current slot are ignored, so callers can pass
+   * `current ± 1` without bounds-checking first.
+   * @param {number} idx
+   * @param {boolean} [animate]
+   */
+  _navigateTo(idx, animate = true) {
+    if (idx < 0 || idx >= this._slots.length) return;
+    if (idx === this._currentSlotIndex) return;
+    const from = this._currentSlotIndex;
+    this._currentSlotIndex = idx;
+    this._transition.run(from, idx, animate);
+    this._updateUI();
+  }
+
   _goNext(animate = true) {
     if (this._currentZoom > 1) this._resetZoomOnPageChange();
     if (this._currentSlotIndex < this._slots.length - 1) {
-      this._currentSlotIndex++;
-      this._updateTrackPosition(animate);
-      this._updateUI();
+      this._navigateTo(this._currentSlotIndex + 1, animate);
     } else {
-      this._updateTrackPosition(true);
+      // Already at the end — settle whatever overshoot the drag left behind.
+      this._transition.cancelDrag();
     }
   }
 
   _goPrev(animate = true) {
     if (this._currentZoom > 1) this._resetZoomOnPageChange();
     if (this._currentSlotIndex > 0) {
-      this._currentSlotIndex--;
-      this._updateTrackPosition(animate);
-      this._updateUI();
+      this._navigateTo(this._currentSlotIndex - 1, animate);
     } else {
-      this._updateTrackPosition(true);
+      this._transition.cancelDrag();
     }
   }
 
   goToSlot(idx) {
     if (idx >= 0 && idx < this._slots.length) {
       this._resetZoomOnPageChange();
-      this._currentSlotIndex = idx;
       if (this.opts.viewMode === 'scroll') {
+        this._currentSlotIndex = idx;
         const els = this._slotTrack.querySelectorAll('.mv-page-slot');
         if (els[idx]) els[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } else {
+        this._updateUI();
+      } else if (idx === this._currentSlotIndex) {
+        // Same slot: nothing to transition, but the original refreshed the UI.
         this._updateTrackPosition(true);
+        this._updateUI();
+      } else {
+        this._navigateTo(idx, true);
       }
-      this._updateUI();
     }
   }
 
@@ -3655,6 +4617,11 @@ export default class MangaViewer {
 
     this._stopMomentum();
     this._setPseudoFullscreenBodyLock(false);
+
+    if (this._transition) {
+      this._transition.destroy();
+      this._transition = null;
+    }
 
     if (this._resizeRaf !== null) {
       cancelAnimationFrame(this._resizeRaf);

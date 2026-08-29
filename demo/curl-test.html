@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Curl transition — dev harness</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #23262f; font: 13px/1.6 ui-monospace, Menlo, monospace; color: #e7e9ee; }
+  .wrap { display: flex; gap: 18px; padding: 14px; box-sizing: border-box; height: 100%; }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+  iframe { border: 1px solid #444; border-radius: 6px; background: #000; }
+  .phone { width: 420px; height: 860px; }
+  .tablet { width: 700px; height: 520px; }
+  label { opacity: .7; }
+  button { font: inherit; padding: 3px 9px; }
+  .hint { margin: 14px 14px 0; font-size: 13px; color: #b8bdc9; }
+  .hint b { color: #e7e9ee; }
+  .wrap { padding-top: 8px; }
+</style>
+</head>
+<body>
+<p class="hint">ページを左右に<b>ドラッグ</b>するとめくれます。右綴じなので右へ引くと次のページ。<b>curl / slide</b> ボタンで見比べられます。</p>
+<div class="wrap">
+  <div class="col">
+    <div><label>単ページ (420×860)</label> <button data-f="a" data-t="curl">curl</button><button data-f="a" data-t="slide">slide</button><button data-f="a" data-d="ltr">ltr</button><button data-f="a" data-d="rtl">rtl</button></div>
+    <iframe id="a" class="phone" src="curl-frame.html?t=curl&dir=rtl"></iframe>
+  </div>
+  <div class="col">
+    <div><label>見開き (700×520)</label> <button data-f="b" data-t="curl">curl</button><button data-f="b" data-t="slide">slide</button></div>
+    <iframe id="b" class="tablet" src="curl-frame.html?t=curl&dir=rtl"></iframe>
+  </div>
+</div>
+<script>
+const state = { a: { t: 'curl', dir: 'rtl' }, b: { t: 'curl', dir: 'rtl' } };
+document.body.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  const f = b.dataset.f; if (!f) return;
+  if (b.dataset.t) state[f].t = b.dataset.t;
+  if (b.dataset.d) state[f].dir = b.dataset.d;
+  document.getElementById(f).src = `curl-frame.html?t=${state[f].t}&dir=${state[f].dir}&r=${Date.now()}`;
+});
+</script>
+</body>
+</html>

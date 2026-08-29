@@ -4,6 +4,39 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **`pageTransition` option** — `'slide'` (default, the existing behaviour) or
+  `'curl'`, a paper-like page turn drawn with WebGL. The sheet bends around a
+  cylinder, shades from the surface normal, and casts a shadow on the page
+  beneath.
+  - **The page is taken by a corner, and creases at whatever angle that
+    implies.** Paper cannot stretch, so the corner in hand stays one sheet-width
+    from the spine and rides an arc; pulling straight sideways therefore carries
+    it upward too, and the fold comes out diagonal — the same reason a real page
+    creases at an angle when the hand moves level. Grip near the top and the top
+    corner lifts; grip near the bottom and the bottom one does.
+  - **In a spread only the leaf on the free side lifts.** The other half stays
+    bound, the crease runs down the gutter, and the sheet's reverse carries the
+    matching half of the next spread — so turning a left-hand page reveals the
+    next spread's right-hand page on the back of the paper, as in a real book.
+  - On a single page the reverse is bare paper with the front showing faintly
+    through, because a sheet turning about the screen's own edge takes whatever
+    is printed on its back out of view with it.
+  - Falls back to `'slide'` per gesture whenever the curl cannot be drawn
+    faithfully: no WebGL, a lost context, a zoomed-in page, scroll mode, or a
+    slot holding something other than images (ads, the purchase page, custom
+    HTML).
+- Page transitions are now a replaceable strategy internally, so further
+  transitions do not need new branches through the navigation code.
+
+### Fixed
+- **Rubber-banding at the wrong end in RTL.** Dragging forward from the first
+  slot of a right-bound book was treated as pulling past the start, so the page
+  resisted instead of turning. The edge test now accounts for reading
+  direction, matching what the release handler already did.
+
 ## [0.6.0] — 2026-05-08
 
 ### Breaking changes

@@ -571,6 +571,28 @@ body.mv-pseudo-fullscreen-body {
   flex-direction: row-reverse;
 }
 
+/* ===== Page Curl =====
+   The curl canvas draws both the settling sheet and the page beneath it, so
+   while it is visible the DOM track underneath must be hidden — otherwise the
+   real <img> shows through wherever the canvas draws background. */
+.mv-curl-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
+  pointer-events: none;
+  display: none;
+}
+
+.mv-curl-canvas.mv-curl-visible {
+  display: block;
+}
+
+.mv-slot-track.mv-curl-covered {
+  visibility: hidden;
+}
+
 /* ===== Tap Areas ===== */
 .mv-tap-area {
   position: absolute;
