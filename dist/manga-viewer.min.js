@@ -2052,6 +2052,84 @@ class CurlTransition {
     });
   }
 
+  /** Height / width of the turning sheet, in screen units. */
+  _sheetAspect() {
+    const v = this._v;
+    const rect = this._rectTop;
+    if (!rect || rect.w <= 0 || !v._main) return 1;
+    const box = v._main.getBoundingClientRect();
+    const w = rect.w * (box.width || 1);
+    const h = rect.h * (box.height || 1);
+    return w > 0 ? h / w : 1;
+  }
+
+  /**
+   * Turn a client point into sheet space: x = 0 at the bound edge, 1 at the
+   * free edge, with y scaled by the aspect ratio so angles survive the mapping.
+   */
+  _toSheet(clientX, clientY) {
+    const v = this._v;
+    const box = v._main.getBoundingClientRect();
+    const r = this._rectTop || FULL_RECT;
+    const mx = (clientX - box.left) / (box.width || 1);
+    const my = 1 - (clientY - box.top) / (box.height || 1);
+    const rx = r.w > 0 ? (mx - r.x) / r.w : 0;
+    const ry = r.h > 0 ? (my - r.y) / r.h : 0;
+    const flip = v.opts.direction === 'rtl';
+    return [flip ? 1 - rx : rx, ry * this._sheetAspect()];
+  }
+
+  /**
+   * Derive the crease from the grip.
+   *
+   * Paper does not stretch, so the corner being held cannot simply follow the
+   * finger anywhere: it stays exactly one sheet-width from the spine and so
+   * swings along an arc. Pulling straight sideways therefore carries the
+   * corner *upward* as well, and the fold — the perpendicular bisector between
+   * where the corner was and where it now is — comes out diagonal. This is why
+   * a real page creases at an angle even when the hand moves level, and it is
+   * the whole reason a turn reads as paper rather than as a sliding panel.
+   */
+  _creaseFromGrip() {
+    const aspect = this._sheetAspect();
+    const gy = this._gripY;
+    const corner = [1, gy];          // the corner in hand
+
+    // Only movement toward the spine turns the page. The corner rides its arc,
+    // so how far it has swung follows from how much closer to the spine it now
+    // sits — not from the length of the finger's path.
+    const pulled = -this._gx;
+    if (pulled <= 1e-4) {
+      this._axisN = [1, 0];
+      this._axisD = 2;               // flat: nothing lies past the crease
+      return;
+    }
+
+    // Arc of the corner about the spine. Half a turn puts it on the far side.
+    const phi = Math.acos(Math.max(-1, Math.min(1, 1 - pulled)));
+    // A corner from the lower half swings up through the page, and vice versa,
+    // so the sheet always turns across the reader rather than off-screen.
+    const dir = gy < aspect / 2 ? 1 : -1;
+    const moved = [Math.cos(phi), gy + dir * Math.sin(phi)];
+
+    const dx = corner[0] - moved[0];
+    const dy = corner[1] - moved[1];
+    const span = Math.hypot(dx, dy);
+    if (span < 1e-4) {
+      this._axisN = [1, 0];
+      this._axisD = 2;
+      return;
+    }
+
+    this._axisN = [dx / span, dy / span];
+    // Perpendicular bisector, pushed back by half the cylinder's circumference
+    // so the corner lands precisely on its arc instead of short of it.
+    const midX = (corner[0] + moved[0]) / 2;
+    const midY = (corner[1] + moved[1]) / 2;
+    this._axisD = midX * this._axisN[0] + midY * this._axisN[1]
+      - (Math.PI * CURL_RADIUS) / 2;
+  }
+
   _stopAnim() {
     if (this._raf !== null) {
       cancelAnimationFrame(this._raf);
