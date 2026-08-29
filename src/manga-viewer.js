@@ -1617,17 +1617,6 @@ const FULL_UV = { x: 0, y: 0, w: 1, h: 1 };
 const FLAT_AXIS = [1, 0];
 const FULL_RECT = { x: 0, y: 0, w: 1, h: 1 };
 
-/**
- * Convert a position given in screen units into the texture coordinates of a
- * pass, so a shadow cast on screen lands in the right place on each surface.
- * Returns -1 when the position falls outside the pass, which disables it.
- */
-function shadowIn(rect, uvRect, screenX) {
-  if (!rect || rect.w <= 0) return -1;
-  const t = (screenX - rect.x) / rect.w;
-  return uvRect.x + t * uvRect.w;
-}
-
 const CURL_VERT = `
 precision highp float;
 attribute vec2 a_pos;
@@ -1641,7 +1630,11 @@ uniform vec4 u_uvRect;    // which part of the texture this pass draws
 uniform vec4 u_backUv;    // which part of the back texture the reverse carries
 uniform float u_zbase;    // depth of the flat sheet; the lift subtracts from it
 uniform float u_persp;    // fake perspective: how much lifted paper grows
+uniform vec2 u_shadowN;   // crease normal, for surfaces catching the sheet's shadow
+uniform float u_shadowD;  // crease offset, likewise
+uniform vec4 u_sheetRect; // the turning sheet's rectangle, to convert into its space
 varying vec2 v_uv;
+varying float v_crease;   // signed distance from the crease, in sheet space
 varying vec2 v_uvBack;
 varying float v_back;
 varying float v_shade;
@@ -1706,6 +1699,13 @@ void main() {
   // how the printing sits once the sheet has come to rest.
   v_uvBack = u_backUv.xy + vec2(p.x, 1.0 - a_pos.y) * u_backUv.zw;
 
+  // Where this point stands relative to the crease, expressed in the turning
+  // sheet's own space. Every surface needs this — not just the sheet — so that
+  // a shadow can follow a slanted fold instead of staying stubbornly vertical.
+  vec2 inSheet = (pos - u_sheetRect.xy) / u_sheetRect.zw;
+  float creaseX = (u_flip > 0.5) ? (1.0 - inSheet.x) : inSheet.x;
+  v_crease = dot(vec2(creaseX, inSheet.y * u_aspect), u_shadowN) - u_shadowD;
+
   // Depth, not draw order, decides what covers what: the further the paper is
   // lifted off the page, the nearer it is to the reader.
   float depth = u_zbase - (lift / (2.0 * u_r)) * 0.6;
@@ -1721,9 +1721,10 @@ uniform vec3 u_paper;
 uniform float u_paperMix;
 uniform float u_bleed;
 uniform float u_backMode;   // 1 = the reverse carries the next page; 0 = bare paper
-uniform float u_shadowAt;        // axis position in screen u; < 0 disables
 uniform float u_shadowStrength;
+uniform float u_shadowReach;     // how far past the crease the shadow carries
 varying vec2 v_uv;
+varying float v_crease;
 varying vec2 v_uvBack;
 varying float v_back;
 varying float v_shade;
@@ -1746,9 +1747,13 @@ void main() {
   }
 
   float shade = v_shade;
-  if (u_shadowStrength > 0.0 && u_shadowAt >= 0.0) {
-    float dist = abs(v_uv.x - u_shadowAt);
-    shade *= 1.0 - u_shadowStrength * (1.0 - smoothstep(0.0, 0.10, dist));
+  if (u_shadowStrength > 0.0) {
+    // The sheet lifts off on the far side of the crease, so that is the side
+    // that darkens — deepest right under the fold, fading out from there.
+    float d = v_crease;
+    float band = 1.0 - smoothstep(0.0, u_shadowReach, abs(d));
+    if (d < 0.0) band *= 0.35;   // a little spill onto the bound side
+    shade *= 1.0 - u_shadowStrength * band;
   }
   gl_FragColor = vec4(c * shade, 1.0);
 }
@@ -2173,8 +2178,11 @@ class CurlTransition {
       backMode: gl.getUniformLocation(prog, 'u_backMode'),
       texBack: gl.getUniformLocation(prog, 'u_texBack'),
       backUv: gl.getUniformLocation(prog, 'u_backUv'),
-      shadowAt: gl.getUniformLocation(prog, 'u_shadowAt'),
       shadowStrength: gl.getUniformLocation(prog, 'u_shadowStrength'),
+      shadowReach: gl.getUniformLocation(prog, 'u_shadowReach'),
+      shadowN: gl.getUniformLocation(prog, 'u_shadowN'),
+      shadowD: gl.getUniformLocation(prog, 'u_shadowD'),
+      sheetRect: gl.getUniformLocation(prog, 'u_sheetRect'),
       zbase: gl.getUniformLocation(prog, 'u_zbase'),
       persp: gl.getUniformLocation(prog, 'u_persp'),
       uvRect: gl.getUniformLocation(prog, 'u_uvRect'),
@@ -2441,36 +2449,31 @@ class CurlTransition {
     gl.uniform1i(this._loc.texBack, 1);
     gl.uniform1i(this._loc.tex, 0);
 
-    // The shadow falls under the raised edge of the sheet — the crest of the
-    // cylinder — not under the crease, which the paper itself covers.
-    //
-    // The crease lives in sheet space, where 1 is the width of the *sheet*.
-    // On a single page that happens to equal the screen, but in a spread the
-    // sheet is only half of it, so the position has to be mapped through the
-    // sheet's own rectangle before other surfaces can be told where to darken.
-    const crestSheet = this._axisD + this._radius();
-    const alongSheet = flip ? 1 - crestSheet : crestSheet;
+    // Every surface is told where the crease runs, in the sheet's own space, so
+    // the shadow can lie along a slanted fold instead of down a screen column.
     const sheetRect = this._rectTop || FULL_RECT;
-    const crestScreen = sheetRect.x + alongSheet * (sheetRect.w || 1);
+    gl.uniform2f(this._loc.shadowN, this._axisN[0], this._axisN[1]);
+    gl.uniform1f(this._loc.shadowD, this._axisD);
+    gl.uniform4f(this._loc.sheetRect, sheetRect.x, sheetRect.y, sheetRect.w, sheetRect.h);
+    // Reach scales with the paper's own bend, so the shadow stays in proportion
+    // whether the sheet is a whole page or one leaf of a spread.
+    gl.uniform1f(this._loc.shadowReach, this._radius() * 1.6);
 
-    // 1. The page underneath, flat, wearing the sheet's shadow. Its shadow is
-    //    expressed in that page's own texture space, so convert the position.
+    // 1. The page underneath, flat, catching the sheet's shadow.
     const shadow = CURL_SHADOW * Math.min(1, this._turnedFraction() * 3);
-    this._drawPass(this._texBottom, this._rectBottom, this._uvBottom, FLAT_AXIS, 2,
-      shadowIn(this._rectBottom, this._uvBottom, crestScreen), shadow, false, 0.9);
+    this._drawPass(this._texBottom, this._rectBottom, this._uvBottom, FLAT_AXIS, 2, shadow, false, 0.9);
 
     // 2. In a spread, the leaf that is not turning — still flat, still bound,
     //    and catching the same shadow.
     if (this._fixed) {
-      this._drawPass(this._texTop, this._fixed.rect, this._fixed.uv, FLAT_AXIS, 2,
-        shadowIn(this._fixed.rect, this._fixed.uv, crestScreen), shadow, false, 0.7);
+      this._drawPass(this._texTop, this._fixed.rect, this._fixed.uv, FLAT_AXIS, 2, shadow, false, 0.7);
     }
 
-    // 3. The sheet itself.
-    this._drawPass(this._texTop, this._rectTop, this._uvTop, this._axisN, this._axisD, -1, 0, true, 0.5);
+    // 3. The sheet itself, which casts the shadow rather than catching it.
+    this._drawPass(this._texTop, this._rectTop, this._uvTop, this._axisN, this._axisD, 0, true, 0.5);
   }
 
-  _drawPass(tex, rect, uvRect, axisN, axisD, shadowAt, shadowStrength, curved, zbase) {
+  _drawPass(tex, rect, uvRect, axisN, axisD, shadowStrength, curved, zbase) {
     const gl = this._gl;
     const L = this._loc;
     gl.bindBuffer(gl.ARRAY_BUFFER, curved ? this._meshBuf : this._quadBuf);
@@ -2481,7 +2484,6 @@ class CurlTransition {
     gl.uniform1f(L.zbase, zbase);
     gl.uniform2f(L.axisN, axisN[0], axisN[1]);
     gl.uniform1f(L.axisD, axisD);
-    gl.uniform1f(L.shadowAt, shadowAt);
     gl.uniform1f(L.shadowStrength, shadowStrength);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, tex);
