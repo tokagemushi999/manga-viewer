@@ -1847,12 +1847,19 @@ class CurlTransition {
       this._pendingTarget = target;
     }
 
-    // Where the grip has travelled, in sheet space. Turning back starts from
-    // a sheet already lying over the spine, so the grip begins out at reach.
+    // Where the held point of the sheet now is, in sheet space.
+    //
+    // Turning forward, the sheet starts under the hand and is carried away, so
+    // the grip travels by however far the finger has moved.
+    //
+    // Turning back, the sheet is lying beyond the spine and gets drawn in: its
+    // edge starts flush with the binding — nothing of it showing — and comes
+    // across as the finger pulls. Both cases move the held point by the same
+    // amount of travel; only where it starts differs.
     const from = this._toSheet(v._startX, v._startY);
     const now = this._toSheet(v._currentX, v._currentY);
-    const base = this._forward ? 0 : -CURL_TURN_REACH;
-    this._gx = base + (now[0] - from[0]);
+    const travelled = now[0] - from[0];
+    this._gx = this._forward ? travelled : (travelled - 1);
     this._gy = now[1] - from[1];
     this._creaseFromGrip();
     this._draw();
