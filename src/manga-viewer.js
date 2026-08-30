@@ -2160,7 +2160,16 @@ class CurlTransition {
     // travels around the bend, not straight across it.)
     const fold = Math.hypot(this._gx, this._gy);
     const reach = (fold + Math.PI * this._radius()) / 2;
-    this._axisD = held[0] * nx + held[1] * ny - reach;
+
+    // The sheet is bound along x = 0 and cannot come away from it. Left
+    // unchecked, a slanted crease sweeps past the binding and lifts that edge
+    // too, so the whole page drifts sideways off its own spine instead of
+    // pivoting on it. Holding the crease at the binding keeps the page
+    // attached: once the fold reaches the spine there is nothing further to
+    // lift, which is exactly the point at which a real page has turned.
+    const aspect = this._sheetAspect();
+    const spineLimit = Math.max(0, ny * aspect);
+    this._axisD = Math.max(spineLimit, held[0] * nx + held[1] * ny - reach);
   }
 
   _stopAnim() {
