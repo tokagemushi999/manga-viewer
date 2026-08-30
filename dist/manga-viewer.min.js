@@ -1605,7 +1605,6 @@ const CURL_RADIUS = 0.11;      // cylinder radius, in page widths — the stiffn
 const CURL_MESH = 36;          // grid resolution across the sheet
 const CURL_PAPER_MIX = 0.07;   // how much paper tint sits over the printing on the reverse
 const CURL_BLEED = 0.12;       // single page: how much of the front shows through the back
-const CURL_PERSPECTIVE = 0;    // lifted paper used to grow slightly; it pushed the sheet off-screen
 const CURL_MAX_TILT = 0.55;    // steepest crease, as |ny| of the unit normal (~33°)
 const CURL_TURN_REACH = 2.0;   // sheet widths of pull that lay the page flat against the spine
 const CURL_SHADOW = 0.42;      // shadow the sheet casts on the page below
@@ -1630,7 +1629,6 @@ uniform vec4 u_rect;      // where the sheet sits on screen: x, y, w, h in clip-
 uniform vec4 u_uvRect;    // which part of the texture this pass draws
 uniform vec4 u_backUv;    // which part of the back texture the reverse carries
 uniform float u_zbase;    // depth of the flat sheet; the lift subtracts from it
-uniform float u_persp;    // fake perspective: how much lifted paper grows
 uniform vec2 u_shadowN;   // crease normal, for surfaces catching the sheet's shadow
 uniform float u_shadowD;  // crease offset, likewise
 uniform vec4 u_sheetRect; // the turning sheet's rectangle, to convert into its space
@@ -1686,11 +1684,7 @@ void main() {
 
   float outX = (u_flip > 0.5) ? (1.0 - sheetX) : sheetX;
 
-  // A hint of perspective: paper lifted toward the reader reads as slightly
-  // taller. Without it the turn looks like a flat cut-out sliding around.
-  float grow = 1.0 + (lift / (2.0 * u_r)) * u_persp;
-  float outY = (sheetY - 0.5) * grow + 0.5;
-  vec2 pos = u_rect.xy + vec2(outX, outY) * u_rect.zw;
+  vec2 pos = u_rect.xy + vec2(outX, sheetY) * u_rect.zw;
 
   // The reverse carries the next page, and that page is printed on the paper —
   // so it is fixed to the sheet's own coordinates, not to where the sheet
@@ -1952,12 +1946,6 @@ class CurlTransition {
     const goingForward = to > from;
     const topIdx = goingForward ? from : to;
     const bottomIdx = goingForward ? to : from;
-    // A cover is made up to a spread with a blank, and its reverse is the
-    // endpaper — plain stock, not a page. Letting the artwork show through it
-    // puts a mirrored cover across the view, which is not what turning a cover
-    // looks like.
-    const topSlot = v._slots[topIdx];
-    this._coverLike = !!(topSlot && topSlot.hasBlank);
 
     const top = this._rasterise(topIdx);
     if (!top) return false;
@@ -2278,7 +2266,6 @@ class CurlTransition {
       shadowD: gl.getUniformLocation(prog, 'u_shadowD'),
       sheetRect: gl.getUniformLocation(prog, 'u_sheetRect'),
       zbase: gl.getUniformLocation(prog, 'u_zbase'),
-      persp: gl.getUniformLocation(prog, 'u_persp'),
       uvRect: gl.getUniformLocation(prog, 'u_uvRect'),
     };
     this._buildMesh();
@@ -2532,14 +2519,13 @@ class CurlTransition {
     gl.uniform1f(this._loc.aspect, this._sheetAspect());
     gl.uniform3f(this._loc.paper, paper[0], paper[1], paper[2]);
     gl.uniform1f(this._loc.paperMix, CURL_PAPER_MIX);
-    gl.uniform1f(this._loc.bleed, this._coverLike ? 0 : CURL_BLEED);
+    gl.uniform1f(this._loc.bleed, CURL_BLEED);
     // The reverse carries the next page only when the sheet is one leaf of a
     // spread, so it lands squarely on the facing half. A cover turns as a whole
     // piece and covers the entire view, with no half for a page to land in —
     // printing one there draws it twice, once on the paper and once beneath.
     // Bare paper is what a reader sees there in any case.
     gl.uniform1f(this._loc.backMode, this._fixed ? 1 : 0);
-    gl.uniform1f(this._loc.persp, CURL_PERSPECTIVE);
     gl.uniform4f(this._loc.backUv, this._backUv.x, this._backUv.y, this._backUv.w, this._backUv.h);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this._texBottom);
