@@ -1606,8 +1606,10 @@ const CURL_BLEED = 0.12;       // single page: how much of the front shows throu
 const CURL_MAX_TILT = 0.55;    // steepest crease, as |ny| of the unit normal (~33°)
 const CURL_TURN_REACH = 2.0;   // sheet widths of pull that lay the page flat against the spine
 const CURL_SHADOW = 0.42;      // shadow the sheet casts on the page below
-const CURL_SETTLE_MS = 430;    // release → finished, when the flick carries no speed
-const CURL_MIN_SETTLE_MS = 210;
+const CURL_SPRING_K = 130;     // spring stiffness pulling a released sheet home (1/s²)
+const CURL_SPRING_ZETA = 0.78; // damping ratio — a little under critical, so the paper
+                               // lands with one soft flap instead of easing to a stop
+const CURL_SETTLE_TIMEOUT_MS = 1500;
 const CURL_MAX_DPR = 3;        // phones run at 3; rendering at 2 and letting the
                                // display scale it up is what makes the edges ragged
 
@@ -1636,6 +1638,7 @@ varying float v_crease;   // signed distance from the crease, in sheet space
 varying vec2 v_uvBack;
 varying float v_back;
 varying float v_shade;
+varying float v_sheen;
 
 const float PI = 3.14159265;
 
@@ -1683,6 +1686,11 @@ void main() {
   vec3 N = normalize(vec3((u_flip > 0.5) ? -nrm.x : nrm.x, nrm.y, nrm.z));
   vec3 L = normalize(vec3(-0.35, 0.22, 1.0));
   v_shade = (0.56 + 0.44 * abs(dot(N, L))) * (back > 0.5 ? 0.93 : 1.0);
+  // A soft sheen where the surface turns to face the light squarely — the
+  // crest of the bend catches it the way slightly coated stock does. Kept
+  // faint: printed paper is matte, and a hard streak would read as plastic.
+  vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
+  v_sheen = pow(abs(dot(N, H)), 28.0) * step(0.001, lift);
   v_back = back;
 
   float outX = (u_flip > 0.5) ? (1.0 - sheetX) : sheetX;
@@ -1723,6 +1731,7 @@ uniform float u_shadowStrength;
 uniform float u_shadowReach;     // how far past the crease the shadow carries
 varying vec2 v_uv;
 varying float v_crease;
+varying float v_sheen;
 varying vec2 v_uvBack;
 varying float v_back;
 varying float v_shade;
@@ -1741,13 +1750,18 @@ void main() {
 
   float shade = v_shade;
   if (u_shadowStrength > 0.0) {
-    // The sheet lifts off on the far side of the crease, so that is the side
-    // that darkens — deepest right under the fold, fading out from there.
+    // Two shadows, not one. Where the paper rests almost on the page the gap
+    // is tight and light cannot get in — a narrow, dark contact line under the
+    // fold. Further out the sheet is well off the surface and only throws a
+    // broad, soft penumbra. One band at one width reads as painted-on.
     float d = v_crease;
-    float band = 1.0 - smoothstep(0.0, u_shadowReach, abs(d));
-    if (d < 0.0) band *= 0.35;   // a little spill onto the bound side
-    shade *= 1.0 - u_shadowStrength * band;
+    float broad = 1.0 - smoothstep(0.0, u_shadowReach, abs(d));
+    float contact = 1.0 - smoothstep(0.0, u_shadowReach * 0.3, abs(d));
+    float sh = u_shadowStrength * (0.55 * broad + 0.45 * contact);
+    if (d < 0.0) sh *= 0.35;     // a little spill onto the bound side
+    shade *= 1.0 - sh;
   }
+  c += vec3(0.09) * v_sheen;
   gl_FragColor = vec4(c * shade, 1.0);
 }
 `;
@@ -1787,11 +1801,10 @@ class CurlTransition {
     this._gx = 0;
     this._gy = 0;
     this._gripY = 0.5;          // where along the free edge the sheet was taken hold of
+    this._samples = [];         // recent grip positions, for release velocity
+    this._everTurned = false;   // once the reader turns a page, no more hinting
+    this._hinted = false;       // the corner breathes once, not on every retry
     this._raf = null;
-    this._settleFrom = 0;
-    this._settleTo = 0;
-    this._settleStart = 0;
-    this._settleMs = CURL_SETTLE_MS;
     this._onSettled = null;
   }
 
@@ -1805,6 +1818,8 @@ class CurlTransition {
 
   beginDrag() {
     this._delegate = null;
+    this._everTurned = true;
+    this._samples = [];
     // A new finger during the settle takes over from where it got to, rather
     // than snapping back and starting again.
     if (this._raf !== null) {
@@ -1856,6 +1871,12 @@ class CurlTransition {
     const travelled = now[0] - from[0];
     this._gx = this._forward ? travelled : (travelled - CURL_TURN_REACH);
     this._gy = now[1] - from[1];
+
+    // Remember how the grip has been moving, so a release can inherit the
+    // finger's speed instead of starting its fall from rest.
+    const t = performance.now();
+    this._samples.push({ t, gx: this._gx, gy: this._gy });
+    while (this._samples.length > 2 && t - this._samples[0].t > 90) this._samples.shift();
     // Kept for the crease angle, which cannot read it back off the fold when
     // the sheet starts out already turned. See _creaseFromGrip.
     this._pulled = Math.abs(travelled);
@@ -1910,6 +1931,43 @@ class CurlTransition {
     this._creaseFromGrip();
     this._draw();
     return this._settle(this._forward ? reach : [0, 0], 0);
+  }
+
+  /**
+   * Lift the corner of the current page a little and let it fall back.
+   *
+   * Nothing on a flat page says it can be turned; a sheet whose corner
+   * breathes up once says so without a word. Runs once, only if the reader
+   * has not already turned a page themselves — at that point they know.
+   */
+  hint() {
+    const v = this._v;
+    if (this._hinted || this._active || this._everTurned || v._isDragging) return;
+    const cur = v._currentSlotIndex;
+    if (cur >= v._slots.length - 1) return;
+    if (!this._start(cur, cur + 1)) return;   // images may not be decoded yet
+    this._hinted = true;
+
+    this._forward = true;
+    const t0 = performance.now();
+    const MS = 850, PEAK = 0.085;
+    const step = () => {
+      if (!this._active) return;
+      const t = Math.min(1, (performance.now() - t0) / MS);
+      // Up quickly, down gently — a breath, not a bounce.
+      const lift = Math.sin(Math.PI * Math.pow(t, 0.8));
+      this._gx = -PEAK * lift;
+      this._gy = -PEAK * 0.25 * lift;
+      this._creaseFromGrip();
+      this._draw();
+      if (t < 1) {
+        this._raf = requestAnimationFrame(step);
+      } else {
+        this._raf = null;
+        this._finish();
+      }
+    };
+    this._raf = requestAnimationFrame(step);
   }
 
   destroy() {
@@ -2060,38 +2118,66 @@ class CurlTransition {
     }));
   }
 
-  _settle(to, velocity) {
+  /**
+   * Let the released sheet go — a damped spring rather than a replayed easing.
+   *
+   * The grip keeps whatever velocity the finger gave it, so a flick sends the
+   * page over hard and a gentle release lets it fall away slowly; the damping
+   * sits a little under critical, so the paper lands with one soft flap. An
+   * easing curve cannot do either: it plays the same film regardless of how
+   * the hand let go.
+   */
+  _settle(to) {
     if (!this._active) return Promise.resolve();
-    const fromG = [this._gx, this._gy];
-    const dist = Math.min(1, Math.hypot(to[0] - fromG[0], to[1] - fromG[1]) / CURL_TURN_REACH);
-    // A flick finishes faster than a slow release.
-    const speed = Math.min(3, Math.abs(velocity) / 1.2);
-    const ms = Math.max(CURL_MIN_SETTLE_MS, CURL_SETTLE_MS * dist / (1 + speed));
-
     this._stopAnim();
-    this._settleFrom = fromG;
-    this._settleTo = to;
-    this._settleStart = performance.now();
-    this._settleMs = ms;
+
+    // Release velocity, in sheet units per second, from the last ~90ms of drag.
+    let vx = 0, vy = 0;
+    const smp = this._samples;
+    if (smp && smp.length >= 2) {
+      const a = smp[0], b = smp[smp.length - 1];
+      const dt = (b.t - a.t) / 1000;
+      if (dt > 0.004) {
+        vx = (b.gx - a.gx) / dt;
+        vy = (b.gy - a.gy) / dt;
+      }
+    }
+    this._samples = [];
+
+    const K = CURL_SPRING_K;
+    const C = 2 * Math.sqrt(K) * CURL_SPRING_ZETA;
+    const t0 = performance.now();
+    let last = t0;
 
     return new Promise((resolve) => {
       this._onSettled = resolve;
       const step = () => {
-        const t = Math.min(1, (performance.now() - this._settleStart) / this._settleMs);
-        // Paper does not coast to a stop — it lets go at the end.
-        const e = 1 - Math.pow(1 - t, 2.4);
-        this._gx = this._settleFrom[0] + (this._settleTo[0] - this._settleFrom[0]) * e;
-        this._gy = this._settleFrom[1] + (this._settleTo[1] - this._settleFrom[1]) * e;
+        const now = performance.now();
+        // Clamp the timestep so a background tab cannot integrate a huge jump.
+        const dt = Math.min(1 / 30, Math.max(0.001, (now - last) / 1000));
+        last = now;
+
+        const ax = K * (to[0] - this._gx) - C * vx;
+        const ay = K * (to[1] - this._gy) - C * vy;
+        vx += ax * dt;
+        vy += ay * dt;
+        this._gx += vx * dt;
+        this._gy += vy * dt;
         this._creaseFromGrip();
         this._draw();
-        if (t < 1) {
-          this._raf = requestAnimationFrame(step);
-        } else {
+
+        const close = Math.hypot(to[0] - this._gx, to[1] - this._gy) < 0.004;
+        const slow = Math.hypot(vx, vy) < 0.05;
+        if ((close && slow) || now - t0 > CURL_SETTLE_TIMEOUT_MS) {
           this._raf = null;
+          this._gx = to[0];
+          this._gy = to[1];
           this._finish();
           const done = this._onSettled;
           this._onSettled = null;
           if (done) done();
+        } else {
+          this._raf = requestAnimationFrame(step);
         }
       };
       this._raf = requestAnimationFrame(step);
@@ -2568,9 +2654,10 @@ class CurlTransition {
     gl.uniform2f(this._loc.shadowN, this._axisN[0], this._axisN[1]);
     gl.uniform1f(this._loc.shadowD, this._axisD);
     gl.uniform4f(this._loc.sheetRect, sheetRect.x, sheetRect.y, sheetRect.w, sheetRect.h);
-    // Reach scales with the paper's own bend, so the shadow stays in proportion
-    // whether the sheet is a whole page or one leaf of a spread.
-    gl.uniform1f(this._loc.shadowReach, this._radius() * 1.6);
+    // Reach scales with the paper's bend so it stays in proportion across
+    // layouts, and widens as the turn progresses — the further the sheet
+    // stands off the page, the softer the shadow it throws.
+    gl.uniform1f(this._loc.shadowReach, this._radius() * (1.2 + 1.4 * this._turnedFraction()));
 
     // 1. The page underneath, flat, catching the sheet's shadow.
     const shadow = CURL_SHADOW * Math.min(1, this._turnedFraction() * 3);
@@ -2823,6 +2910,7 @@ export default class MangaViewer {
       onBack: null,
       lastPageAlign: 'start',
       pageTransition: 'slide',
+      curlHint: true,
     }, options);
 
     if (!['auto', 'light', 'dark'].includes(o.theme)) {
@@ -3358,6 +3446,21 @@ export default class MangaViewer {
 
     // AdSense push
     this._setManagedTimeout(() => this._initAds(), ADSENSE_INIT_DELAY_MS);
+
+    // Breathe the corner of the page once, so a first-time reader can see it
+    // turns. The transition skips it by itself once the reader has turned a
+    // page; the retry covers cover art that has not decoded by the first try.
+    if (this.opts.pageTransition === 'curl' && this.opts.curlHint !== false && !this._curlHintDone) {
+      this._curlHintDone = true;
+      this._setManagedTimeout(() => {
+        if (this._transition && this._transition.hint) this._transition.hint();
+      }, 900);
+      // Second try only matters when the first found the images undecoded;
+      // hint() itself refuses to run twice.
+      this._setManagedTimeout(() => {
+        if (this._transition && this._transition.hint) this._transition.hint();
+      }, 2600);
+    }
   }
 
   _createPageNode(pageIdx, loadingAttr) {
