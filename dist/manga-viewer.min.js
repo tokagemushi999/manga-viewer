@@ -2825,7 +2825,7 @@ export default class MangaViewer {
       headerButtons: null,
       footerBottomPadding: null,
       onBack: null,
-      lastPageAlign: 'center',
+      lastPageAlign: 'start',
       pageTransition: 'slide',
     }, options);
 

@@ -6,6 +6,16 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Breaking changes
+- **`lastPageAlign` now defaults to `'start'` instead of `'center'`.** An odd
+  final page used to float in the middle of a spread, belonging to neither
+  half. It now sits on the reading side — right in a right-bound book, left in
+  a left-bound one — paired with a blank, which is where a real book leaves it.
+  Pass `lastPageAlign: 'center'` to keep the old layout. Beyond looking wrong,
+  a centred page cannot be turned with `pageTransition: 'curl'`: with no gutter
+  and no bound edge there is nothing to hinge it on, so it falls back to
+  sliding.
+
 ### Added
 - **`pageTransition` option** — `'slide'` (default, the existing behaviour) or
   `'curl'`, a paper-like page turn drawn with WebGL. The sheet bends around a

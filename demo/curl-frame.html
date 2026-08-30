@@ -23,7 +23,7 @@ window.mv = new MangaViewer({
   firstPageSingle: true,
   title: 'curl harness',
   // ?align=start puts an odd final page on the reading-start side (RTL: right)
-  lastPageAlign: q.get('align') || 'start',
+  lastPageAlign: q.get('align') || undefined,
   storageKey: 'curl_harness',
 });
 </script>

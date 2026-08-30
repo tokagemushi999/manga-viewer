@@ -194,6 +194,15 @@ export interface MangaViewerOptions {
    * - `'start'`: page at reading-start side of the spread (RTL=right, LTR=left).
    * - `'end'`: page at reading-end side of the spread (RTL=left, LTR=right).
    */
+  /**
+   * Where an odd final page sits in a spread.
+   * - `'start'` (default) — on the reading side (RTL: right, LTR: left),
+   *   paired with a blank, which is where a real book leaves it
+   * - `'end'` — on the far side
+   * - `'center'` — floating in the middle, belonging to neither half
+   *
+   * @default 'start'
+   */
   lastPageAlign?: 'center' | 'start' | 'end';
 
   /**
