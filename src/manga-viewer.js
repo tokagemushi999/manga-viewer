@@ -1952,6 +1952,12 @@ class CurlTransition {
     const goingForward = to > from;
     const topIdx = goingForward ? from : to;
     const bottomIdx = goingForward ? to : from;
+    // A cover is made up to a spread with a blank, and its reverse is the
+    // endpaper — plain stock, not a page. Letting the artwork show through it
+    // puts a mirrored cover across the view, which is not what turning a cover
+    // looks like.
+    const topSlot = v._slots[topIdx];
+    this._coverLike = !!(topSlot && topSlot.hasBlank);
 
     const top = this._rasterise(topIdx);
     if (!top) return false;
@@ -2524,7 +2530,7 @@ class CurlTransition {
     gl.uniform1f(this._loc.aspect, this._sheetAspect());
     gl.uniform3f(this._loc.paper, paper[0], paper[1], paper[2]);
     gl.uniform1f(this._loc.paperMix, CURL_PAPER_MIX);
-    gl.uniform1f(this._loc.bleed, CURL_BLEED);
+    gl.uniform1f(this._loc.bleed, this._coverLike ? 0 : CURL_BLEED);
     // The reverse carries the next page only when the sheet is one leaf of a
     // spread, so it lands squarely on the facing half. A cover turns as a whole
     // piece and covers the entire view, with no half for a page to land in —
