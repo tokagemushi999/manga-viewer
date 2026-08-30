@@ -1939,6 +1939,7 @@ class CurlTransition {
     const v = this._v;
     if (!this.canRun() || v._currentZoom > 1) return false;
     if (!this._ensureGL()) return false;
+    this._measure();               // background colour, for rasterising
 
     // Going forward, the sheet on top is the page being left behind; going
     // back, it is the page returning from the edge. Which side the book is
@@ -1993,6 +1994,7 @@ class CurlTransition {
     }
 
     this._forward = goingForward;
+    this._measure();               // again, now that the sheet's rectangle is known
     // Where along the free edge the sheet was taken hold of — this is what
     // makes a corner grip crease diagonally and a mid-edge grip crease square.
     // The sheet is taken exactly where the finger landed on the free edge, not
@@ -2071,24 +2073,45 @@ class CurlTransition {
   }
 
   /**
-   * Cylinder radius in sheet space. The constant is given per screen width, so
-   * a spread's half-width leaf has to scale it up — otherwise the same paper
-   * would bend half as much simply because the page is narrower.
+   * Take the measurements a turn depends on, once, when it begins.
+   *
+   * Everything here reads layout or computed style, which forces the browser
+   * to flush pending work before answering. Called per frame — and the draw
+   * path used to call several of them — that alone can cost more than the
+   * rendering it feeds. None of it changes while a finger is down.
    */
+  _measure() {
+    const v = this._v;
+    const rect = this._rectTop;
+    const box = v._main ? v._main.getBoundingClientRect() : { width: 1, height: 1 };
+    this._mainBox = box;
+
+    const w = rect ? rect.w * (box.width || 1) : (box.width || 1);
+    const h = rect ? rect.h * (box.height || 1) : (box.height || 1);
+    this._aspect = w > 0 ? h / w : 1;
+
+    const sheetW = (rect && rect.w) || 1;
+    this._r = Math.min(0.3, CURL_RADIUS / sheetW);
+
+    const cs = v._main ? getComputedStyle(v._main) : null;
+    const m = cs && /rgba?\(([^)]+)\)/.exec(cs.backgroundColor || '');
+    this._bgCss = (cs && cs.backgroundColor) || '#000';
+    const rgb = m ? m[1].split(',').map(Number) : [0, 0, 0];
+    this._bg = [(rgb[0] || 0) / 255, (rgb[1] || 0) / 255, (rgb[2] || 0) / 255];
+    const lum = 0.299 * this._bg[0] + 0.587 * this._bg[1] + 0.114 * this._bg[2];
+    // Paper is pale whatever the room is like; a dark ground only takes the
+    // edge off it, rather than turning the sheet's back into a grey slab.
+    this._paper = lum > 0.5 ? [0.95, 0.94, 0.92] : [0.80, 0.79, 0.77];
+  }
+
+  /** Cylinder radius in sheet space, scaled so the physical bend is constant. */
   _radius() {
-    const w = (this._rectTop && this._rectTop.w) || 1;
-    return Math.min(0.3, CURL_RADIUS / w);
+    return this._r;
   }
 
   /** Height / width of the turning sheet, in screen units. */
   _sheetAspect() {
-    const v = this._v;
-    const rect = this._rectTop;
-    if (!rect || rect.w <= 0 || !v._main) return 1;
-    const box = v._main.getBoundingClientRect();
-    const w = rect.w * (box.width || 1);
-    const h = rect.h * (box.height || 1);
-    return w > 0 ? h / w : 1;
+    return this._aspect;
   }
 
   /**
@@ -2097,7 +2120,7 @@ class CurlTransition {
    */
   _toSheet(clientX, clientY) {
     const v = this._v;
-    const box = v._main.getBoundingClientRect();
+    const box = this._mainBox || v._main.getBoundingClientRect();
     const r = this._rectTop || FULL_RECT;
     const mx = (clientX - box.left) / (box.width || 1);
     const my = 1 - (clientY - box.top) / (box.height || 1);
@@ -2306,7 +2329,7 @@ class CurlTransition {
 
   _resizeCanvas() {
     const v = this._v;
-    const rect = v._main.getBoundingClientRect();
+    const rect = this._mainBox || v._main.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, CURL_MAX_DPR);
     const w = Math.max(1, Math.round(rect.width * dpr));
     const h = Math.max(1, Math.round(rect.height * dpr));
@@ -2439,33 +2462,22 @@ class CurlTransition {
   }
 
   _bgColour() {
-    const cs = getComputedStyle(this._v._main);
-    return cs.backgroundColor || '#000';
+    return this._bgCss;
   }
 
   /** The page background, as a 0..1 RGB triple. */
   _bgRGB() {
-    const m = /rgba?\(([^)]+)\)/.exec(this._bgColour());
-    if (!m) return [0, 0, 0];
-    const [r, g, b] = m[1].split(',').map(Number);
-    return [(r || 0) / 255, (g || 0) / 255, (b || 0) / 255];
+    return this._bg;
   }
 
-  /**
-   * Paper colour for the reverse of the sheet. Paper is pale whatever the room
-   * is like, so a dark page background only takes the edge off it — matching
-   * the background outright turns the back of the sheet into a grey slab.
-   */
+  /** Paper colour for the reverse of the sheet. */
   _paperRGB() {
-    const [r, g, b] = this._bgRGB();
-    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-    return lum > 0.5 ? [0.95, 0.94, 0.92] : [0.80, 0.79, 0.77];
+    return this._paper;
   }
 
   _draw() {
     const gl = this._gl;
     if (!gl || !this._active) return;
-    this._resizeCanvas();
 
     gl.viewport(0, 0, this._canvas.width, this._canvas.height);
     gl.enable(gl.DEPTH_TEST);
