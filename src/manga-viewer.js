@@ -1951,8 +1951,20 @@ class CurlTransition {
 
     const top = this._rasterise(topIdx);
     if (!top) return false;
+
     const bottom = this._rasterise(bottomIdx);
     if (!bottom) return false;
+
+    // A lone page in a two-page view — the last one of an odd count — is laid
+    // out in the middle, belonging to neither side. There is no gutter to hinge
+    // it on if it is the sheet, and nowhere for the sheet to land if it is what
+    // lies beneath, so either way the turn has no geometry to follow. (A cover
+    // is a lone page too, but it is made up with a blank and does have a
+    // gutter.) Slide handles these.
+    if (v._spreadMode) {
+      const adrift = (slot, ras) => ras.splitU === null && !(slot && slot.hasBlank);
+      if (adrift(v._slots[topIdx], top) || adrift(v._slots[bottomIdx], bottom)) return false;
+    }
 
     this._releaseTextures();
     this._texTop = this._upload(top.canvas);
