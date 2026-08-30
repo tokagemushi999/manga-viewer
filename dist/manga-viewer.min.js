@@ -1863,6 +1863,9 @@ class CurlTransition {
     const travelled = now[0] - from[0];
     this._gx = this._forward ? travelled : (travelled - CURL_TURN_REACH);
     this._gy = now[1] - from[1];
+    // Kept for the crease angle, which cannot read it back off the fold when
+    // the sheet starts out already turned. See _creaseFromGrip.
+    this._pulled = Math.abs(travelled);
     this._creaseFromGrip();
     this._draw();
   }
@@ -2117,13 +2120,19 @@ class CurlTransition {
     const held = [1, this._gripY];                           // where it was taken
     const now = [held[0] + this._gx, held[1] + this._gy];    // where it is now
 
-    const dx = held[0] - now[0];
+    // Which way the fold runs. Going forward this is simply how far the held
+    // point has moved. Going back it cannot be, because the sheet begins fully
+    // turned: the fold would be a page-width across while the finger has moved
+    // a fraction of that, so any slant in the drag is swallowed and the crease
+    // comes out upright. Measuring against the pull itself keeps a diagonal
+    // drag diagonal in both directions.
+    const dx = this._forward ? (held[0] - now[0]) : Math.max(1e-4, this._pulled);
     const dy = held[1] - now[1];
     const span = Math.hypot(dx, dy);
 
     // Only travel toward the spine turns the page; dragging away from it, or
     // not at all, leaves the sheet lying flat.
-    if (span < 1e-4 || dx <= 0) {
+    if (span < 1e-4 || (this._forward && dx <= 0) || (!this._forward && this._gx >= 0)) {
       this._axisN = [1, 0];
       this._axisD = 2;               // flat: nothing lies past the crease
       return;
