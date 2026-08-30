@@ -1852,14 +1852,18 @@ class CurlTransition {
     // Turning forward, the sheet starts under the hand and is carried away, so
     // the grip travels by however far the finger has moved.
     //
-    // Turning back, the sheet is lying beyond the spine and gets drawn in: its
-    // edge starts flush with the binding — nothing of it showing — and comes
-    // across as the finger pulls. Both cases move the held point by the same
-    // amount of travel; only where it starts differs.
+    // Turning back is the end of a forward turn played in reverse: the sheet
+    // starts where a completed turn left it and is pulled upright again. Where
+    // that is depends on the layout — a single page has gone off the screen
+    // entirely, while a spread's leaf is lying across the facing half — so the
+    // starting point is one screen width of travel, measured in the sheet's own
+    // units. Both directions then move the held point by the same distance the
+    // finger does.
     const from = this._toSheet(v._startX, v._startY);
     const now = this._toSheet(v._currentX, v._currentY);
     const travelled = now[0] - from[0];
-    this._gx = this._forward ? travelled : (travelled - 1);
+    const sheetW = (this._rectTop && this._rectTop.w) || 1;
+    this._gx = this._forward ? travelled : (travelled - 1 / sheetW);
     this._gy = now[1] - from[1];
     this._creaseFromGrip();
     this._draw();
