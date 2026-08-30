@@ -435,35 +435,31 @@ body.mv-pseudo-fullscreen-body {
 }
 
 .mv-title {
-  /* Absolutely centered so the visual centre matches the viewport centre,
-     even when the back button and the right-side button cluster have
-     different widths. pointer-events stay on the buttons behind it. */
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  /* Laid out between the back button and the right-hand cluster rather than
+     centred on the viewport. Centring it absolutely reads better when there is
+     room, but the title then sits on top of the buttons as soon as there is
+     not — a long title on a phone runs straight under them. Sharing the row
+     means it can only ever truncate. */
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  margin: 0 6px;
   color: var(--mv-fg);
   font-weight: bold;
   font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 50%;
   pointer-events: none;
-  margin: 0;
-}
-
-@media (max-width: 480px) {
-  /* On phone widths the right-side cluster of buttons can squeeze the
-     title; cap it harder so it just truncates with ellipsis instead of
-     overlapping. */
-  .mv-title { max-width: 40%; }
 }
 
 .mv-header-buttons {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Never give up width to the title — the buttons are the fixed part of the
+     row and the title is what should shrink. */
+  flex: 0 0 auto;
 }
 
 .mv-header-btn {
