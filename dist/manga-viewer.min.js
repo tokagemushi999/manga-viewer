@@ -1605,7 +1605,8 @@ const CURL_RADIUS = 0.11;      // cylinder radius, in page widths — the stiffn
 const CURL_MESH = 36;          // grid resolution across the sheet
 const CURL_PAPER_MIX = 0.07;   // how much paper tint sits over the printing on the reverse
 const CURL_BLEED = 0.12;       // single page: how much of the front shows through the back
-const CURL_PERSPECTIVE = 0.025; // how much the lifted paper grows toward the reader — paper must not look elastic
+const CURL_PERSPECTIVE = 0;    // lifted paper used to grow slightly; it pushed the sheet off-screen
+const CURL_MAX_TILT = 0.55;    // steepest crease, as |ny| of the unit normal (~33°)
 const CURL_TURN_REACH = 2.0;   // sheet widths of pull that lay the page flat against the spine
 const CURL_SHADOW = 0.42;      // shadow the sheet casts on the page below
 const CURL_SETTLE_MS = 300;    // release → finished, when the flick carries no speed
@@ -2138,7 +2139,16 @@ class CurlTransition {
       return;
     }
 
-    this._axisN = [dx / span, dy / span];
+    let nx = dx / span;
+    let ny = dy / span;
+    // A steep crease throws the folded corner clear of the page — far enough
+    // that it runs off the screen and appears cut in half. Real paper is held
+    // by its spine and cannot swing that wide, so the lean is capped.
+    if (Math.abs(ny) > CURL_MAX_TILT) {
+      ny = (ny < 0 ? -1 : 1) * CURL_MAX_TILT;
+      nx = Math.sqrt(Math.max(0, 1 - ny * ny));
+    }
+    this._axisN = [nx, ny];
     // Perpendicular bisector, pushed back by half the cylinder's circumference
     // so the held point lands under the finger instead of short of it.
     const midX = (held[0] + now[0]) / 2;
