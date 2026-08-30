@@ -1887,11 +1887,16 @@ class CurlTransition {
     return this._settle(this._forward ? [0, 0] : this._reachTarget(), 0);
   }
 
-  /** The grip position that has the sheet all the way over, keeping its angle. */
+  /**
+   * The grip position that has the sheet all the way over.
+   *
+   * The lean is dropped on the way: a page let go of falls flat, and carrying
+   * the angle through to the end leaves it lying askew across the screen with
+   * its corners cut off by the edges. Settling towards a square fold lets the
+   * slant ease out as the paper comes down, which is what a released page does.
+   */
   _reachTarget() {
-    const len = Math.hypot(this._gx, this._gy);
-    if (len < 1e-4) return [-CURL_TURN_REACH, 0];
-    return [this._gx / len * CURL_TURN_REACH, this._gy / len * CURL_TURN_REACH];
+    return [-CURL_TURN_REACH, 0];
   }
 
   /** Progress of the turn, 0 to 1, for shading that grows as the sheet lifts. */
@@ -2375,20 +2380,25 @@ class CurlTransition {
     const slotRect = slotEl.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, CURL_MAX_DPR);
 
-    // The sheet is the printed area — the union of the page images — not the
-    // whole viewport. Letterboxing stays behind as background.
+    // The sheet is the printed area — not the whole viewport, so letterboxing
+    // stays behind as background. A blank filler counts as part of the sheet
+    // even though nothing is drawn on it: a cover paired with one still turns
+    // as a whole leaf, and leaving it out would make that half transparent,
+    // showing the page underneath where paper should be.
     let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
-    const boxes = [];
-    for (const img of imgs) {
-      const r = img.getBoundingClientRect();
+    const extent = [];      // every part of the sheet, blanks included
+    const toDraw = [];      // the parts that actually carry ink, with their boxes
+    for (const child of zoomEl.children) {
+      const r = child.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return null;
-      boxes.push(r);
+      extent.push(r);
+      if (child.tagName === 'IMG') toDraw.push({ el: child, rect: r });
       left = Math.min(left, r.left);
       top = Math.min(top, r.top);
       right = Math.max(right, r.right);
       bottom = Math.max(bottom, r.bottom);
     }
-    if (!boxes.length || right <= left || bottom <= top) return null;
+    if (!toDraw.length || right <= left || bottom <= top) return null;
 
     const w = Math.max(1, Math.round((right - left) * dpr));
     const h = Math.max(1, Math.round((bottom - top) * dpr));
@@ -2401,10 +2411,10 @@ class CurlTransition {
     ctx.fillRect(0, 0, w, h);
 
     try {
-      for (let i = 0; i < imgs.length; i++) {
-        const r = boxes[i];
+      for (const part of toDraw) {
+        const r = part.rect;
         ctx.drawImage(
-          imgs[i],
+          part.el,
           (r.left - left) * dpr,
           (r.top - top) * dpr,
           r.width * dpr,
@@ -2431,9 +2441,11 @@ class CurlTransition {
     // Two images side by side means a spread, and the gap between them is the
     // gutter — the axis a real page turns around. One image (including a cover
     // paired with a blank) behaves like a single page.
+    // A gutter only exists where two printed pages meet. A cover paired with a
+    // blank is one leaf, however wide it sits, and must turn as a whole.
     let splitU = null;
-    if (boxes.length === 2) {
-      const ordered = [...boxes].sort((a, b) => a.left - b.left);
+    if (toDraw.length === 2) {
+      const ordered = toDraw.map(d => d.rect).sort((a, b) => a.left - b.left);
       const gutter = (ordered[0].right + ordered[1].left) / 2;
       splitU = (gutter - left) / (right - left);
       if (!(splitU > 0.05 && splitU < 0.95)) splitU = null;
