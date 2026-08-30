@@ -1609,8 +1609,8 @@ const CURL_PERSPECTIVE = 0;    // lifted paper used to grow slightly; it pushed 
 const CURL_MAX_TILT = 0.55;    // steepest crease, as |ny| of the unit normal (~33°)
 const CURL_TURN_REACH = 2.0;   // sheet widths of pull that lay the page flat against the spine
 const CURL_SHADOW = 0.42;      // shadow the sheet casts on the page below
-const CURL_SETTLE_MS = 300;    // release → finished, when the flick carries no speed
-const CURL_MIN_SETTLE_MS = 130;
+const CURL_SETTLE_MS = 430;    // release → finished, when the flick carries no speed
+const CURL_MIN_SETTLE_MS = 210;
 const CURL_MAX_DPR = 2;
 
 const FULL_UV = { x: 0, y: 0, w: 1, h: 1 };
@@ -2192,7 +2192,17 @@ class CurlTransition {
     // lift, which is exactly the point at which a real page has turned.
     const aspect = this._sheetAspect();
     const spineLimit = Math.max(0, ny * aspect);
-    this._axisD = Math.max(spineLimit, held[0] * nx + held[1] * ny - reach);
+    const raw = held[0] * nx + held[1] * ny - reach;
+
+    // While the page is still standing up, the crease must not run past the
+    // binding or the sheet comes away from its spine and slides sideways. Once
+    // it is going over, though, the pivot *is* the binding — the paper is
+    // falling onto the far side — so the constraint has to let go, or the turn
+    // stalls half done and the page appears to change without finishing.
+    const release = Math.min(1, Math.max(0, (fold - 1) / 0.6));
+    this._axisD = raw < spineLimit
+      ? spineLimit + (raw - spineLimit) * release
+      : raw;
   }
 
   _stopAnim() {
