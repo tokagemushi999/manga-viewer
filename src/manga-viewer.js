@@ -2149,12 +2149,18 @@ class CurlTransition {
       nx = Math.sqrt(Math.max(0, 1 - ny * ny));
     }
     this._axisN = [nx, ny];
-    // Perpendicular bisector, pushed back by half the cylinder's circumference
-    // so the held point lands under the finger instead of short of it.
-    const midX = (held[0] + now[0]) / 2;
-    const midY = (held[1] + now[1]) / 2;
-    this._axisD = midX * this._axisN[0] + midY * this._axisN[1]
-      - (Math.PI * this._radius()) / 2;
+
+    // Place the crease by how far the sheet is actually folded, rather than by
+    // bisecting the two points. A bisector only lands right when the fold runs
+    // exactly between them, which stops being true once the lean is capped or
+    // the angle is taken from the pull — and then the sheet spreads far past
+    // where it belongs. Sitting the held point this distance from the crease
+    // carries it the width of the fold, whichever way the crease ended up
+    // facing. (Half the cylinder's circumference comes off because the paper
+    // travels around the bend, not straight across it.)
+    const fold = Math.hypot(this._gx, this._gy);
+    const reach = (fold + Math.PI * this._radius()) / 2;
+    this._axisD = held[0] * nx + held[1] * ny - reach;
   }
 
   _stopAnim() {
