@@ -2108,7 +2108,10 @@ class CurlTransition {
    * Sharpens to a crease as the fold is pressed against the binding.
    */
   _radius() {
-    return this._rBend != null ? Math.max(0.008, this._rBend) : this._r;
+    // The floor keeps the bend from collapsing to nothing, which would divide
+    // by zero in the shader; it is small enough that a fully pressed fold
+    // carries the sheet to within a percent or two of the far side.
+    return this._rBend != null ? Math.max(0.003, this._rBend) : this._r;
   }
 
   /** Height / width of the turning sheet, in screen units. */
@@ -2207,8 +2210,8 @@ class CurlTransition {
     // stops being round: it creases. Flattening the bend as the fold jams lets
     // the page finish going over without the binding ever giving way.
     const jam = Math.max(0, spineLimit - raw);
-    const flatten = Math.min(1, jam / 0.45);
-    this._rBend = this._r * (1 - 0.92 * flatten);
+    const flatten = Math.min(1, jam / 0.3);
+    this._rBend = this._r * (1 - 0.985 * flatten);
   }
 
   _stopAnim() {
