@@ -2109,9 +2109,12 @@ class CurlTransition {
     this._paper = lum > 0.5 ? [0.95, 0.94, 0.92] : [0.80, 0.79, 0.77];
   }
 
-  /** Cylinder radius in sheet space, scaled so the physical bend is constant. */
+  /**
+   * Cylinder radius in sheet space, scaled so the physical bend is constant.
+   * Sharpens to a crease as the fold is pressed against the binding.
+   */
   _radius() {
-    return this._r;
+    return this._rBend != null ? Math.max(0.008, this._rBend) : this._r;
   }
 
   /** Height / width of the turning sheet, in screen units. */
@@ -2187,7 +2190,7 @@ class CurlTransition {
     // facing. (Half the cylinder's circumference comes off because the paper
     // travels around the bend, not straight across it.)
     const fold = Math.hypot(this._gx, this._gy);
-    const reach = (fold + Math.PI * this._radius()) / 2;
+    const reach = (fold + Math.PI * this._r) / 2;
 
     // The sheet is bound along x = 0 and cannot come away from it. Left
     // unchecked, a slanted crease sweeps past the binding and lifts that edge
@@ -2202,11 +2205,16 @@ class CurlTransition {
     // The bound edge never moves — it is stitched into the spine. Holding the
     // crease off it at every stage is what keeps the page hinged instead of
     // sliding bodily across the screen.
-    //
-    // This does not prevent the turn from completing: a released page settles
-    // towards a square fold (see _reachTarget), and with no lean the crease can
-    // reach the binding itself, at which point the whole sheet has gone over.
     this._axisD = Math.max(spineLimit, raw);
+
+    // Once the crease has run up against the binding it can travel no further,
+    // and a rounded fold would leave the sheet only part way over — its own
+    // curve eats the remaining distance. Paper pressed against a stitched spine
+    // stops being round: it creases. Flattening the bend as the fold jams lets
+    // the page finish going over without the binding ever giving way.
+    const jam = Math.max(0, spineLimit - raw);
+    const flatten = Math.min(1, jam / 0.45);
+    this._rBend = this._r * (1 - 0.92 * flatten);
   }
 
   _stopAnim() {
@@ -2517,6 +2525,11 @@ class CurlTransition {
     gl.uniform3f(this._loc.paper, paper[0], paper[1], paper[2]);
     gl.uniform1f(this._loc.paperMix, CURL_PAPER_MIX);
     gl.uniform1f(this._loc.bleed, CURL_BLEED);
+    // The reverse carries the next page only when the sheet is one leaf of a
+    // spread, so it lands squarely on the facing half. A cover turns as a whole
+    // piece and covers the entire view, with no half for a page to land in —
+    // printing one there draws it twice, once on the paper and once beneath.
+    // Bare paper is what a reader sees there in any case.
     gl.uniform1f(this._loc.backMode, this._fixed ? 1 : 0);
     gl.uniform1f(this._loc.persp, CURL_PERSPECTIVE);
     gl.uniform4f(this._loc.backUv, this._backUv.x, this._backUv.y, this._backUv.w, this._backUv.h);
