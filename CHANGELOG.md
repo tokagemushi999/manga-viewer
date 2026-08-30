@@ -17,6 +17,17 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   sliding.
 
 ### Added
+- **A released page falls with the weight of paper.** The settle is a damped
+  spring rather than a replayed easing: the sheet keeps whatever speed the
+  finger gave it, so a flick sends it over hard and a gentle release lets it
+  fall away slowly, and it lands with one soft flap (damping just under
+  critical).
+- **Two shadows under the fold, not one.** A narrow dark contact line where
+  the paper almost touches the page, and a broad penumbra that widens as the
+  sheet stands further off it. A faint sheen rides the crest of the bend.
+- **The corner of the page breathes once when a book opens** (`curlHint`,
+  default on), so a first-time reader can see the page turns. It skips itself
+  once the reader has turned a page on their own.
 - **`pageTransition` option** — `'slide'` (default, the existing behaviour) or
   `'curl'`, a paper-like page turn drawn with WebGL. The sheet bends around a
   cylinder, shades from the surface normal, and casts a shadow on the page
