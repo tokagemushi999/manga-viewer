@@ -1602,7 +1602,9 @@ class SlideTransition {
  * ───────────────────────────────────────────────────────────────────────── */
 
 const CURL_RADIUS = 0.11;      // cylinder radius, in page widths — the stiffness of the paper
-const CURL_MESH = 36;          // grid resolution across the sheet
+const CURL_MESH = 96;          // grid resolution across the sheet — a coarse grid
+                               // shows the fold as a staircase, since the crease
+                               // can only bend where there is a vertex to bend at
 const CURL_PAPER_MIX = 0.07;   // how much paper tint sits over the printing on the reverse
 const CURL_BLEED = 0.12;       // single page: how much of the front shows through the back
 const CURL_MAX_TILT = 0.55;    // steepest crease, as |ny| of the unit normal (~33°)
@@ -1610,7 +1612,8 @@ const CURL_TURN_REACH = 2.0;   // sheet widths of pull that lay the page flat ag
 const CURL_SHADOW = 0.42;      // shadow the sheet casts on the page below
 const CURL_SETTLE_MS = 430;    // release → finished, when the flick carries no speed
 const CURL_MIN_SETTLE_MS = 210;
-const CURL_MAX_DPR = 2;
+const CURL_MAX_DPR = 3;        // phones run at 3; rendering at 2 and letting the
+                               // display scale it up is what makes the edges ragged
 
 const FULL_UV = { x: 0, y: 0, w: 1, h: 1 };
 /** A crease that never bites: used by the passes that draw a flat page. */
