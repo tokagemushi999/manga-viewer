@@ -1978,6 +1978,23 @@ class CurlTransition {
                           uv: { x: top.splitU, y: 0, w: 1 - top.splitU, h: 1 } };
       const sheet = rtl ? leftPart : rightPart;
       const staying = rtl ? rightPart : leftPart;
+
+      // The two halves meet exactly at the gutter, and rounding can leave a
+      // hairline between them through which the page underneath shows. Growing
+      // the half that stays put a touch into the gutter closes it; the turning
+      // sheet passes over the top, so the overlap is never seen.
+      const seam = 0.0016;
+      const seamU = r.w > 0 ? seam / r.w : 0;
+      if (rtl) {
+        staying.rect = { x: staying.rect.x - seam, y: staying.rect.y,
+                         w: staying.rect.w + seam, h: staying.rect.h };
+        staying.uv = { x: staying.uv.x - seamU, y: staying.uv.y,
+                       w: staying.uv.w + seamU, h: staying.uv.h };
+      } else {
+        staying.rect = { ...staying.rect, w: staying.rect.w + seam };
+        staying.uv = { ...staying.uv, w: staying.uv.w + seamU };
+      }
+
       this._rectTop = sheet.rect;
       this._uvTop = sheet.uv;
       this._fixed = staying;
