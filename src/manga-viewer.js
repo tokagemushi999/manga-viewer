@@ -2199,15 +2199,14 @@ class CurlTransition {
     const spineLimit = Math.max(0, ny * aspect);
     const raw = held[0] * nx + held[1] * ny - reach;
 
-    // While the page is still standing up, the crease must not run past the
-    // binding or the sheet comes away from its spine and slides sideways. Once
-    // it is going over, though, the pivot *is* the binding — the paper is
-    // falling onto the far side — so the constraint has to let go, or the turn
-    // stalls half done and the page appears to change without finishing.
-    const release = Math.min(1, Math.max(0, (fold - 1) / 0.6));
-    this._axisD = raw < spineLimit
-      ? spineLimit + (raw - spineLimit) * release
-      : raw;
+    // The bound edge never moves — it is stitched into the spine. Holding the
+    // crease off it at every stage is what keeps the page hinged instead of
+    // sliding bodily across the screen.
+    //
+    // This does not prevent the turn from completing: a released page settles
+    // towards a square fold (see _reachTarget), and with no lean the crease can
+    // reach the binding itself, at which point the whole sheet has gone over.
+    this._axisD = Math.max(spineLimit, raw);
   }
 
   _stopAnim() {
