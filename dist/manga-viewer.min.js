@@ -2454,11 +2454,13 @@ class CurlTransition {
     // Two images side by side means a spread, and the gap between them is the
     // gutter — the axis a real page turns around. One image (including a cover
     // paired with a blank) behaves like a single page.
-    // A gutter only exists where two printed pages meet. A cover paired with a
-    // blank is one leaf, however wide it sits, and must turn as a whole.
+    // Wherever two halves sit side by side there is a gutter, and the sheet is
+    // hinged along it — a cover made up with a blank included. Treating that as
+    // one wide leaf turns both halves at once, which is two pages' worth of
+    // paper moving where only one should.
     let splitU = null;
-    if (toDraw.length === 2) {
-      const ordered = toDraw.map(d => d.rect).sort((a, b) => a.left - b.left);
+    if (extent.length === 2) {
+      const ordered = [...extent].sort((a, b) => a.left - b.left);
       const gutter = (ordered[0].right + ordered[1].left) / 2;
       splitU = (gutter - left) / (right - left);
       if (!(splitU > 0.05 && splitU < 0.95)) splitU = null;
