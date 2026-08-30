@@ -1664,7 +1664,11 @@ void main() {
       disp = -u_axisN * (s - u_r * sin(theta));
       lift = u_r * (1.0 - cos(theta));
       nrm = vec3(-u_axisN * sin(theta), cos(theta));
-      back = step(PI * 0.5, theta);
+      // Bring the reverse in gradually rather than at the exact crest. Flipping
+      // it in one step lays a hard band of the next page along the top of the
+      // bend, squeezed into a few pixels — it reads as the cut edge of the
+      // paper rather than as its underside coming into view.
+      back = smoothstep(PI * 0.5, PI * 0.74, theta);
     } else {
       // Past the half turn: flat again, face down, lying back over the sheet.
       disp = -u_axisN * (2.0 * s - PI * u_r);
@@ -1728,21 +1732,16 @@ varying float v_back;
 varying float v_shade;
 
 void main() {
-  vec3 c;
-  if (v_back > 0.5) {
-    if (u_backMode > 0.5) {
-      // In a spread the sheet falls onto the facing half, so its reverse is
-      // genuinely the next page — printed, not hinted at.
-      c = mix(texture2D(u_texBack, v_uvBack).rgb, u_paper, u_paperMix);
-    } else {
-      // On a single page the sheet turns out past the edge of the screen, so
-      // whatever is printed on its back leaves with it. What the reader can
-      // actually see is paper, with the front showing faintly through.
-      c = mix(u_paper, texture2D(u_tex, v_uv).rgb, u_bleed);
-    }
-  } else {
-    c = texture2D(u_tex, v_uv).rgb;
-  }
+  vec3 front = texture2D(u_tex, v_uv).rgb;
+  vec3 reverse = (u_backMode > 0.5)
+    // In a spread the sheet falls onto the facing half, so its reverse is
+    // genuinely the next page — printed, not hinted at.
+    ? mix(texture2D(u_texBack, v_uvBack).rgb, u_paper, u_paperMix)
+    // On a single page the sheet turns out past the edge of the screen, so
+    // whatever is printed on its back leaves with it. What the reader can
+    // actually see is paper, with the front showing faintly through.
+    : mix(u_paper, front, u_bleed);
+  vec3 c = mix(front, reverse, v_back);
 
   float shade = v_shade;
   if (u_shadowStrength > 0.0) {
