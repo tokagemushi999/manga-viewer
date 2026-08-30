@@ -1604,7 +1604,9 @@ const CURL_MESH = 96;          // grid resolution across the sheet — a coarse 
 const CURL_PAPER_MIX = 0.07;   // how much paper tint sits over the printing on the reverse
 const CURL_BLEED = 0.12;       // single page: how much of the front shows through the back
 const CURL_MAX_TILT = 0.55;    // steepest crease, as |ny| of the unit normal (~33°)
-const CURL_TURN_REACH = 2.0;   // sheet widths of pull that lay the page flat against the spine
+const CURL_TURN_REACH = 2.2;   // sheet widths of pull that lay the page flat against
+                               // the spine, with margin so the turn ends clear
+                               // rather than a sliver short
 const CURL_SHADOW = 0.42;      // shadow the sheet casts on the page below
 const CURL_SPRING_K = 130;     // spring stiffness pulling a released sheet home (1/s²)
 const CURL_SPRING_ZETA = 0.78; // damping ratio — a little under critical, so the paper
@@ -2221,10 +2223,10 @@ class CurlTransition {
    * Sharpens to a crease as the fold is pressed against the binding.
    */
   _radius() {
-    // The floor keeps the bend from collapsing to nothing, which would divide
-    // by zero in the shader; it is small enough that a fully pressed fold
-    // carries the sheet to within a percent or two of the far side.
-    return this._rBend != null ? Math.max(0.003, this._rBend) : this._r;
+    // The floor only exists to keep the shader from dividing by zero. Every
+    // bit of radius left at the end is width the sheet fails to travel — a
+    // fully pressed fold stops short by pi*r — so it is kept far below a pixel.
+    return this._rBend != null ? Math.max(0.0006, this._rBend) : this._r;
   }
 
   /** Height / width of the turning sheet, in screen units. */
@@ -2324,7 +2326,10 @@ class CurlTransition {
     // the page finish going over without the binding ever giving way.
     const jam = Math.max(0, spineLimit - raw);
     const flatten = Math.min(1, jam / 0.3);
-    this._rBend = this._r * (1 - 0.985 * flatten);
+    // Pressed almost to nothing: what radius survives is width the sheet never
+    // travels, and at a spread's larger radius even 1.5% of it left a visible
+    // sliver of the old page behind.
+    this._rBend = this._r * (1 - 0.998 * flatten);
   }
 
   _stopAnim() {
