@@ -1753,7 +1753,15 @@ void main() {
   // lookup drift into the neighbouring page while the sheet is still on its
   // way over. p.x runs 0 at the spine to 1 at the free edge, which is exactly
   // how the printing sits once the sheet has come to rest.
-  v_uvBack = u_backUv.xy + vec2(p.x, 1.0 - a_pos.y) * u_backUv.zw;
+  //
+  // The sheet lands on the far side of the spine, so a point p.x from the
+  // spine ends up p.x the other way from the gutter. In the back texture the
+  // gutter is u = 0 of its slice when the book is bound on the right (the
+  // slice is the right-hand page) and u = 1 when bound on the left (it is
+  // the left-hand page), so the left-bound lookup runs the other way — read
+  // straight across, the printing on the reverse came out mirrored.
+  float backX = (u_flip > 0.5) ? p.x : 1.0 - p.x;
+  v_uvBack = u_backUv.xy + vec2(backX, 1.0 - a_pos.y) * u_backUv.zw;
 
   // Where this point stands relative to the crease, expressed in the turning
   // sheet's own space. Every surface needs this — not just the sheet — so that
@@ -3485,18 +3493,17 @@ export default class MangaViewer {
 
       if (slot.hasBlank) {
         const blank = el('div', { className: 'mv-blank-page', 'aria-hidden': 'true' });
-        // Cover slot keeps the v0.2.x convention. Orphan last-page slots
-        // honour `lastPageAlign`:
+        // Orphan last-page slots honour `lastPageAlign`:
         //   'start' → page at reading-start side (RTL=right, LTR=left)
         //   'end'   → page at reading-end side (RTL=left, LTR=right)
+        // The cover always sits at the reading-end side — the free edge, where
+        // a closed book is opened from: left in a right-bound book, right in a
+        // left-bound one. (Earlier versions put a left-bound cover on the left,
+        // the spine side, where it could not be turned open like paper.)
         if (slot.blankAlign === 'start') {
           pageNodes.push(blank);
-        } else if (slot.blankAlign === 'end') {
-          pageNodes.unshift(blank);
-        } else if (dir === 'rtl') {
-          pageNodes.unshift(blank);
         } else {
-          pageNodes.push(blank);
+          pageNodes.unshift(blank);
         }
       }
 
