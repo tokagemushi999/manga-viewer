@@ -221,6 +221,15 @@ export interface MangaViewerOptions {
    * @default 'slide'
    */
   pageTransition?: 'slide' | 'curl';
+
+  /**
+   * With `pageTransition: 'curl'`, lift the corner of the page once shortly
+   * after the book opens, so a first-time reader can see it turns. It is
+   * skipped once the reader has touched the page.
+   *
+   * @default true
+   */
+  curlHint?: boolean;
 }
 
 /** Custom button definition usable inside `headerButtons`. */
