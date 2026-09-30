@@ -1537,6 +1537,8 @@ function el(tag, attrs = {}, children = []) {
  *
  * Finger-driven:  beginDrag() → dragTo(offset) × n → commitDrag(v) | cancelDrag()
  * Button-driven:  run(from, to, animate)
+ * Pinch:          interrupt() — something else has taken the screen; stop
+ *                 whatever is moving and leave the current slot showing
  *
  * `dragTo` receives the raw pixel offset rather than a 0..1 progress so that
  * a transition which tracks the finger literally (slide) stays exact; ones
@@ -1570,6 +1572,8 @@ class SlideTransition {
   commitDrag() { return this._settle(); }
 
   cancelDrag() { return this._settle(); }
+
+  interrupt() { return this._settle(); }
 
   run(from, to, animate = true) {
     this._v._updateTrackPosition(animate);
@@ -1804,6 +1808,7 @@ class CurlTransition {
     this._gy = 0;
     this._gripY = 0.5;          // where along the free edge the sheet was taken hold of
     this._samples = [];         // recent grip positions, for release velocity
+    this._owned = false;        // the finger now down has started a turn of its own
     this._everTurned = false;   // once the reader turns a page, no more hinting
     this._hinted = false;       // the corner breathes once, not on every retry
     this._raf = null;
@@ -1820,17 +1825,13 @@ class CurlTransition {
 
   beginDrag() {
     this._delegate = null;
+    this._owned = false;
     this._everTurned = true;
     this._samples = [];
-    // A new finger during the settle takes over from where it got to, rather
-    // than snapping back and starting again.
-    if (this._raf !== null) {
-      cancelAnimationFrame(this._raf);
-      this._raf = null;
-      const done = this._onSettled;
-      this._onSettled = null;
-      if (done) done();
-    }
+    // A page still landing from the last turn, or the corner still breathing,
+    // is left alone here. Most fingers that come down now are taps, and a tap
+    // must not catch a falling page and carry it back up. Only a finger that
+    // actually starts a turn takes over — see dragTo.
     this._fallback.beginDrag();
   }
 
@@ -1845,16 +1846,26 @@ class CurlTransition {
       return;
     }
 
-    const target = v._slotForDrag(offset);
-    if (target === null) { this._useFallback(); this._fallback.dragTo(offset, atEdge); return; }
+    // Straight up or down, or back exactly over the point it started from,
+    // the finger has not picked a side. A turn it already has in hand stays
+    // with it; otherwise there is nothing to do until it moves sideways.
+    const target = offset ? v._slotForDrag(offset) : (this._owned ? this._pendingTarget : null);
+    if (target === null) {
+      if (offset) { this._useFallback(); this._fallback.dragTo(offset, atEdge); }
+      return;
+    }
 
-    if (!this._active || this._pendingTarget !== target) {
+    if (!this._owned || this._pendingTarget !== target) {
+      // Whatever is still moving — the last page coming down, the corner
+      // hint — is finished the moment this finger starts a turn of its own,
+      // so the new sheet is taken exactly where the finger landed.
+      if (this._active) this._finish();
       if (!this._start(v._currentSlotIndex, target)) {
         this._useFallback();
         this._fallback.dragTo(offset, atEdge);
         return;
       }
-      this._pendingTarget = target;
+      this._owned = true;
     }
 
     // Where the held point of the sheet now is, in sheet space.
@@ -1887,19 +1898,31 @@ class CurlTransition {
   }
 
   commitDrag(velocity) {
-    if (this._delegate === this._fallback || !this._active) {
+    if (this._delegate === this._fallback || !this._owned || !this._active) {
       return this._fallback.commitDrag(velocity);
     }
+    // The finger has let go; the sheet is on its own now.
+    this._owned = false;
     // Finish the turn: carry the grip on in the direction it was already
     // going, so a crease drawn at an angle stays at that angle as it falls.
-    return this._settle(this._forward ? this._reachTarget() : [0, 0], velocity);
+    return this._settle(this._forward ? this._reachTarget() : [0, 0]);
   }
 
   cancelDrag() {
-    if (this._delegate === this._fallback || !this._active) {
+    // Not a turn this finger started — a tap, or a gesture slide handled.
+    // Anything still in flight from before is left to land by itself.
+    if (this._delegate === this._fallback || !this._owned || !this._active) {
       return this._fallback.cancelDrag();
     }
-    return this._settle(this._forward ? [0, 0] : this._reachTarget(), 0);
+    this._owned = false;
+    return this._settle(this._forward ? [0, 0] : this._reachTarget());
+  }
+
+  interrupt() {
+    if (this._active) this._finish();
+    this._delegate = null;
+    this._owned = false;
+    return this._fallback.interrupt();
   }
 
   /**
@@ -1921,12 +1944,14 @@ class CurlTransition {
 
   /** Button, tap or keyboard navigation: no drag, just run the whole turn. */
   run(from, to, animate = true) {
+    // A page still landing is put down before anything else moves. Left in
+    // the air it would cover whatever comes next — including a slide.
+    if (this._active) this._finish();
     if (!animate || Math.abs(to - from) !== 1 || !this._start(from, to)) {
       return this._fallback.run(from, to, animate);
     }
     // No finger to follow: take the lower corner and run a gentle diagonal,
     // which is what a hand does when it turns a page without thinking.
-    const aspect = this._sheetAspect();
     const reach = [-CURL_TURN_REACH, CURL_TURN_REACH * 0.16];
     [this._gx, this._gy] = this._forward ? [0, 0] : reach;
     this._gripY = 0;
@@ -1951,6 +1976,9 @@ class CurlTransition {
     this._hinted = true;
 
     this._forward = true;
+    // The lower corner, where a thumb rests — not wherever the last touch
+    // happened to be, which before any touch is the top of the screen.
+    this._gripY = 0;
     const t0 = performance.now();
     const MS = 850, PEAK = 0.085;
     const step = () => {
@@ -1959,7 +1987,7 @@ class CurlTransition {
       // Up quickly, down gently — a breath, not a bounce.
       const lift = Math.sin(Math.PI * Math.pow(t, 0.8));
       this._gx = -PEAK * lift;
-      this._gy = -PEAK * 0.25 * lift;
+      this._gy = PEAK * 0.25 * lift;
       this._creaseFromGrip();
       this._draw();
       if (t < 1) {
@@ -3674,7 +3702,11 @@ export default class MangaViewer {
       this._pinchCenterY = center.y - window.innerHeight / 2;
       this._zoomPanStartXBackup = this._zoomPanX;
       this._zoomPanStartYBackup = this._zoomPanY;
+      // A second finger makes this a pinch. Whatever the first one started — a
+      // page part-way over, or one still landing — stops now, so the zoom
+      // happens on the page the reader can actually see.
       this._isDragging = false;
+      this._transition.interrupt();
       return;
     }
 
@@ -3897,7 +3929,8 @@ export default class MangaViewer {
     const diff = this._currentX - this._startX;
 
     // Pulling past the first or last page meets resistance instead of a wall.
-    const atEdge = this._slotForDrag(diff) === null;
+    // No sideways travel at all is not a pull past anything.
+    const atEdge = diff !== 0 && this._slotForDrag(diff) === null;
     this._transition.dragTo(atEdge ? diff * 0.3 : diff, atEdge);
   }
 
