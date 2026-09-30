@@ -80,6 +80,11 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   came to rest still leaning, with a wedge of the old page standing until
   the view snapped over.
 - **Turning back by key or tap before any drag** no longer creases along NaN.
+- **Turning back no longer swings the whole page at the first touch.** A
+  backward drag with the slightest slant in its first pixel used to rotate the
+  sheet lying on the far side by up to twice the lean cap; the slant now grows
+  in with the pull. A return pulled all the way lands flat instead of snapping
+  flat.
 - **The reverse of a turning sheet in a left-bound spread** was printed
   mirror-wise.
 - **A lost WebGL context no longer switches the curl off for good.** The next
