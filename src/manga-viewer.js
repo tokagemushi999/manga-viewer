@@ -2410,7 +2410,18 @@ class CurlTransition {
     // How far the held point must be carried across the crease: the part of
     // the finger's movement square to it. (What runs along the crease is what
     // the cap on the lean gives up.)
-    const travel = Math.max(0, -(this._gx * nx + this._gy * ny));
+    //
+    // A forward pull steeper than the cap is less and less a pull toward the
+    // spine, so the grip it asks for fades with its sideways part: a drag
+    // straight up or down turns nothing, instead of folding by the cap's share
+    // of it until the instant it turns vertical and the sheet snaps flat.
+    let gx = this._gx, gy = this._gy;
+    if (this._forward && Math.abs(dy) / span > CURL_MAX_TILT) {
+      const fade = (dx / span) / Math.sqrt(1 - CURL_MAX_TILT * CURL_MAX_TILT);
+      gx *= fade;
+      gy *= fade;
+    }
+    const travel = Math.max(0, -(gx * nx + gy * ny));
     const across = held[0] * nx + held[1] * ny;   // the held point, along the normal
     const r = this._r;
 
@@ -2441,39 +2452,54 @@ class CurlTransition {
 
     // Pulled beyond even a flat fold along this crease: the finger has left
     // the circle that a sheet held by its spine can sweep. The sheet still
-    // follows as far as paper can — it swings about the corner of the spine
-    // the crease runs through, keeping the held point on that circle at the
-    // spot nearest the finger. (Only turning forward; a sheet drawn back
-    // takes its slant from the pull, as designed above.)
-    if (this._forward && travel > 2 * depth) this._swingAboutSpine(held, ny <= 0);
+    // follows as far as paper can — see _swingAboutSpine. (Only turning
+    // forward; a sheet drawn back takes its slant from the pull, as designed
+    // above.)
+    if (this._forward && travel > 2 * depth) this._swingAboutSpine(held, gx, gy);
   }
 
   /**
-   * Fold the sheet flat about a crease through one corner of the spine,
-   * aimed so the held point lands as near the finger as the paper allows.
-   * Leaves the crease as it is when the finger is within reach, or when
-   * the swing would lift the bound edge or lean past the cap.
+   * Fold the sheet flat about a crease through a corner of the spine, aimed
+   * so the held point lands as near the finger as paper that cannot stretch
+   * allows.
+   *
+   * A sheet held by its spine can swing about its foot, with the crease
+   * leaning down, or about its head, with the crease leaning up; leaning the
+   * other way would lift the bound edge, so each is held at the crease lying
+   * along the spine — the one fold both corners share. That shared fold is
+   * why passing from one corner to the other is seamless. The lean is capped
+   * here as everywhere, and whichever corner lands the held point nearer the
+   * finger is used.
    */
-  _swingAboutSpine(held, aboutFoot) {
-    const pivotY = aboutFoot ? 0 : this._sheetAspect();
-    const hx = held[0], hy = held[1] - pivotY;                   // held point, from the pivot
-    const fx = held[0] + this._gx, fy = held[1] + this._gy - pivotY;
-    const reach = Math.hypot(hx, hy);
-    const want = Math.hypot(fx, fy);
-    if (!(want > reach) || want < 1e-6) return;
-    // On the circle, toward the finger.
-    const rx = fx / want * reach, ry = fy / want * reach;
-    const mx = hx - rx, my = hy - ry;
-    const m = Math.hypot(mx, my);
-    if (m < 1e-6) return;
-    const nx = mx / m, ny = my / m;
-    // Swinging about the foot of the spine, the crease must lean down to
-    // keep the rest of the spine on the side that stays; about the head,
-    // up. Past that the bound edge would lift.
-    if (aboutFoot ? ny > 0 : ny < 0) return;
-    if (Math.abs(ny) > CURL_MAX_TILT) return;
-    this._axisN = [nx, ny];
-    this._axisD = ny * pivotY;
+  _swingAboutSpine(held, gx, gy) {
+    const aspect = this._sheetAspect();
+    const fx = held[0] + gx, fy = held[1] + gy;               // where the grip is asked to go
+    let best = null;
+    for (const pivotY of [0, aspect]) {
+      const hx = held[0], hy = held[1] - pivotY;               // from the pivot
+      const px = fx, py = fy - pivotY;
+      const reach = Math.hypot(hx, hy);
+      const want = Math.hypot(px, py);
+      if (!(want > reach)) continue;          // the finger is within reach of this corner
+      // On the circle, toward the finger; the crease bisects that and the held point.
+      const rx = px / want * reach, ry = py / want * reach;
+      const m = Math.hypot(hx - rx, hy - ry);
+      if (m < 1e-9) continue;
+      let nx = (hx - rx) / m;
+      let ny = (hy - ry) / m;
+      if (pivotY === 0 ? ny > 0 : ny < 0) { nx = 1; ny = 0; }
+      if (Math.abs(ny) > CURL_MAX_TILT) {
+        ny = (ny < 0 ? -1 : 1) * CURL_MAX_TILT;
+        nx = Math.sqrt(1 - ny * ny);
+      }
+      // Where the held point lands, folded flat over this crease.
+      const d = nx * hx + ny * hy;
+      const miss = Math.hypot(held[0] - 2 * d * nx - fx, held[1] - 2 * d * ny - fy);
+      if (!best || miss < best.miss) best = { nx, ny, D: ny * pivotY, miss };
+    }
+    if (!best) return;
+    this._axisN = [best.nx, best.ny];
+    this._axisD = best.D;
     this._rBend = 0;
   }
 
