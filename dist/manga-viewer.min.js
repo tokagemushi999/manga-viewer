@@ -1608,9 +1608,15 @@ const CURL_MESH = 96;          // grid resolution across the sheet — a coarse 
 const CURL_PAPER_MIX = 0.07;   // how much paper tint sits over the printing on the reverse
 const CURL_BLEED = 0.12;       // single page: how much of the front shows through the back
 const CURL_MAX_TILT = 0.55;    // steepest crease, as |ny| of the unit normal (~33°)
-const CURL_TURN_REACH = 2.2;   // sheet widths of pull that lay the page flat against
-                               // the spine, with margin so the turn ends clear
-                               // rather than a sliver short
+const CURL_FULL_TURN = 2;     // grip travel that lays the sheet flat on the far side:
+                               // the free edge ends where its mirror image across
+                               // the spine would be, two sheet widths away
+const CURL_TURN_REACH = 2.05;  // where a released turn is sent — a touch past lying
+                               // flat, so the last frames are already flat
+const CURL_TILT_RAMP = 0.3;    // turning back, the pull over which a slanted drag is
+                               // allowed to lean the crease in full
+const CURL_RUN_LIFT = 4.5;     // upward swing given to the corner when a page turns
+                               // with no finger to follow (sheet widths per second)
 const CURL_SHADOW = 0.42;      // shadow the sheet casts on the page below
 const CURL_SPRING_K = 130;     // spring stiffness pulling a released sheet home (1/s²)
 const CURL_SPRING_ZETA = 0.78; // damping ratio — a little under critical, so the paper
@@ -1618,6 +1624,44 @@ const CURL_SPRING_ZETA = 0.78; // damping ratio — a little under critical, so 
 const CURL_SETTLE_TIMEOUT_MS = 1500;
 const CURL_MAX_DPR = 3;        // phones run at 3; rendering at 2 and letting the
                                // display scale it up is what makes the edges ragged
+
+/**
+ * How far a point `s` past the crease is carried back across it when the
+ * paper bends around a cylinder of radius `r` — the vertex shader's rule,
+ * with the lift ignored because the view looks straight down on the page.
+ */
+function curlShift(s, r) {
+  return s < Math.PI * r ? s - r * Math.sin(s / r) : 2 * s - Math.PI * r;
+}
+
+/** The distance past the crease that `curlShift` carries exactly `travel`. */
+function curlDepthFor(travel, r) {
+  if (travel >= Math.PI * r) return (travel + Math.PI * r) / 2;
+  // Still on the bend: no closed form, but curlShift only grows with s.
+  let lo = 0, hi = Math.PI * r;
+  for (let i = 0; i < 32; i++) {
+    const mid = (lo + hi) / 2;
+    if (curlShift(mid, r) < travel) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/**
+ * The bend radius, at most `r`, at which a point `s` past the crease is
+ * carried exactly `travel` — for when the crease can move no further and the
+ * paper has to be pressed tighter instead.
+ */
+function curlBendFor(s, travel, r) {
+  if (travel >= 2 * s) return 0;               // flat, and that is as far as it goes
+  if (curlShift(s, r) >= travel) return r;
+  // curlShift falls as the bend opens, so halve the interval on the radius.
+  let lo = 0, hi = r;
+  for (let i = 0; i < 32; i++) {
+    const mid = (lo + hi) / 2;
+    if (curlShift(s, mid) > travel) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
 
 const FULL_UV = { x: 0, y: 0, w: 1, h: 1 };
 /** A crease that never bites: used by the passes that draw a flat page. */
@@ -1882,7 +1926,7 @@ class CurlTransition {
     const from = this._toSheet(v._startX, v._startY);
     const now = this._toSheet(v._currentX, v._currentY);
     const travelled = now[0] - from[0];
-    this._gx = this._forward ? travelled : (travelled - CURL_TURN_REACH);
+    this._gx = this._forward ? travelled : (travelled - CURL_FULL_TURN);
     this._gy = now[1] - from[1];
 
     // Remember how the grip has been moving, so a release can inherit the
@@ -1890,9 +1934,6 @@ class CurlTransition {
     const t = performance.now();
     this._samples.push({ t, gx: this._gx, gy: this._gy });
     while (this._samples.length > 2 && t - this._samples[0].t > 90) this._samples.shift();
-    // Kept for the crease angle, which cannot read it back off the fold when
-    // the sheet starts out already turned. See _creaseFromGrip.
-    this._pulled = Math.abs(travelled);
     this._creaseFromGrip();
     this._draw();
   }
@@ -1950,14 +1991,16 @@ class CurlTransition {
     if (!animate || Math.abs(to - from) !== 1 || !this._start(from, to)) {
       return this._fallback.run(from, to, animate);
     }
-    // No finger to follow: take the lower corner and run a gentle diagonal,
-    // which is what a hand does when it turns a page without thinking.
-    const reach = [-CURL_TURN_REACH, CURL_TURN_REACH * 0.16];
-    [this._gx, this._gy] = this._forward ? [0, 0] : reach;
+    // No finger to follow: take the lower corner and let it swing up a little
+    // as it goes, which is what a hand does when it turns a page without
+    // thinking. The swing is given as speed rather than as a slanted
+    // destination: aimed askew, the sheet would come to rest still leaning,
+    // with a wedge of the old page left standing along the spine.
     this._gripY = 0;
+    [this._gx, this._gy] = this._forward ? [0, 0] : [-CURL_FULL_TURN, 0];
     this._creaseFromGrip();
     this._draw();
-    return this._settle(this._forward ? reach : [0, 0], 0);
+    return this._settle(this._forward ? this._reachTarget() : [0, 0], [0, CURL_RUN_LIFT]);
   }
 
   /**
@@ -2157,14 +2200,15 @@ class CurlTransition {
    * easing curve cannot do either: it plays the same film regardless of how
    * the hand let go.
    */
-  _settle(to) {
+  _settle(to, v0 = null) {
     if (!this._active) return Promise.resolve();
     this._stopAnim();
 
-    // Release velocity, in sheet units per second, from the last ~90ms of drag.
-    let vx = 0, vy = 0;
+    // Release velocity, in sheet units per second, from the last ~90ms of drag
+    // — or the push given, when there was no finger.
+    let vx = v0 ? v0[0] : 0, vy = v0 ? v0[1] : 0;
     const smp = this._samples;
-    if (smp && smp.length >= 2) {
+    if (!v0 && smp && smp.length >= 2) {
       const a = smp[0], b = smp[smp.length - 1];
       const dt = (b.t - a.t) / 1000;
       if (dt > 0.004) {
@@ -2251,10 +2295,10 @@ class CurlTransition {
    * Sharpens to a crease as the fold is pressed against the binding.
    */
   _radius() {
-    // The floor only exists to keep the shader from dividing by zero. Every
-    // bit of radius left at the end is width the sheet fails to travel — a
-    // fully pressed fold stops short by pi*r — so it is kept far below a pixel.
-    return this._rBend != null ? Math.max(0.0006, this._rBend) : this._r;
+    // The floor only keeps the shader from dividing by zero. Whatever radius
+    // is left once the paper lies flat is width it never travels (pi*r), so
+    // it sits far below a pixel.
+    return this._rBend != null ? Math.max(0.0001, this._rBend) : this._r;
   }
 
   /** Height / width of the turning sheet, in screen units. */
@@ -2292,13 +2336,13 @@ class CurlTransition {
     const held = [1, this._gripY];                           // where it was taken
     const now = [held[0] + this._gx, held[1] + this._gy];    // where it is now
 
-    // Which way the fold runs. Going forward this is simply how far the held
-    // point has moved. Going back it cannot be, because the sheet begins fully
-    // turned: the fold would be a page-width across while the finger has moved
-    // a fraction of that, so any slant in the drag is swallowed and the crease
-    // comes out upright. Measuring against the pull itself keeps a diagonal
-    // drag diagonal in both directions.
-    const dx = this._forward ? (held[0] - now[0]) : Math.max(1e-4, this._pulled);
+    // Which way the fold runs. Going forward this is simply the way the held
+    // point has moved. Going back it cannot be: the sheet begins fully turned,
+    // two sheet widths from where it rests, so any slant in the drag is lost in
+    // that distance and the crease comes out upright. Measuring against the
+    // pull itself keeps a diagonal drag diagonal in both directions.
+    const pulled = this._gx + CURL_FULL_TURN;     // going back: how far it has come
+    const dx = this._forward ? (held[0] - now[0]) : Math.max(1e-4, pulled);
     const dy = held[1] - now[1];
     const span = Math.hypot(dx, dy);
 
@@ -2307,6 +2351,7 @@ class CurlTransition {
     if (span < 1e-4 || (this._forward && dx <= 0) || (!this._forward && this._gx >= 0)) {
       this._axisN = [1, 0];
       this._axisD = 2;               // flat: nothing lies past the crease
+      this._rBend = this._r;
       return;
     }
 
@@ -2314,50 +2359,48 @@ class CurlTransition {
     let ny = dy / span;
     // A steep crease throws the folded corner clear of the page — far enough
     // that it runs off the screen and appears cut in half. Real paper is held
-    // by its spine and cannot swing that wide, so the lean is capped.
-    if (Math.abs(ny) > CURL_MAX_TILT) {
-      ny = (ny < 0 ? -1 : 1) * CURL_MAX_TILT;
+    // by its spine and cannot swing that wide, so the lean is capped. Going
+    // back, the cap opens up only as the pull grows: at the first touch there
+    // is no pull to take a slant from, and the sheet would tip over sideways.
+    const maxTilt = this._forward
+      ? CURL_MAX_TILT
+      : CURL_MAX_TILT * Math.min(1, Math.max(0, pulled) / CURL_TILT_RAMP);
+    if (Math.abs(ny) > maxTilt) {
+      ny = (ny < 0 ? -1 : 1) * maxTilt;
       nx = Math.sqrt(Math.max(0, 1 - ny * ny));
     }
     this._axisN = [nx, ny];
 
-    // Place the crease by how far the sheet is actually folded, rather than by
-    // bisecting the two points. A bisector only lands right when the fold runs
-    // exactly between them, which stops being true once the lean is capped or
-    // the angle is taken from the pull — and then the sheet spreads far past
-    // where it belongs. Sitting the held point this distance from the crease
-    // carries it the width of the fold, whichever way the crease ended up
-    // facing. (Half the cylinder's circumference comes off because the paper
-    // travels around the bend, not straight across it.)
-    const fold = Math.hypot(this._gx, this._gy);
-    const reach = (fold + Math.PI * this._r) / 2;
+    // How far the held point must be carried across the crease: the part of
+    // the finger's movement square to it. (What runs along the crease is what
+    // the cap on the lean gives up.)
+    const travel = Math.max(0, -(this._gx * nx + this._gy * ny));
+    const across = held[0] * nx + held[1] * ny;   // the held point, along the normal
+    const r = this._r;
 
     // The sheet is bound along x = 0 and cannot come away from it. Left
     // unchecked, a slanted crease sweeps past the binding and lifts that edge
     // too, so the whole page drifts sideways off its own spine instead of
-    // pivoting on it. Holding the crease at the binding keeps the page
-    // attached: once the fold reaches the spine there is nothing further to
-    // lift, which is exactly the point at which a real page has turned.
-    const aspect = this._sheetAspect();
-    const spineLimit = Math.max(0, ny * aspect);
-    const raw = held[0] * nx + held[1] * ny - reach;
+    // pivoting on it. The crease is held off the binding at every stage.
+    const spineLimit = Math.max(0, ny * this._sheetAspect());
 
-    // The bound edge never moves — it is stitched into the spine. Holding the
-    // crease off it at every stage is what keeps the page hinged instead of
-    // sliding bodily across the screen.
-    this._axisD = Math.max(spineLimit, raw);
+    // Sit the crease exactly where the held point, carried around a bend of
+    // the paper's natural radius, lands under the finger — on the bend itself
+    // while the pull is short, flat and folded back once it is long.
+    const free = across - curlDepthFor(travel, r);
+    if (free >= spineLimit) {
+      this._axisD = free;
+      this._rBend = r;
+      return;
+    }
 
-    // Once the crease has run up against the binding it can travel no further,
-    // and a rounded fold would leave the sheet only part way over — its own
-    // curve eats the remaining distance. Paper pressed against a stitched spine
-    // stops being round: it creases. Flattening the bend as the fold jams lets
-    // the page finish going over without the binding ever giving way.
-    const jam = Math.max(0, spineLimit - raw);
-    const flatten = Math.min(1, jam / 0.3);
-    // Pressed almost to nothing: what radius survives is width the sheet never
-    // travels, and at a spread's larger radius even 1.5% of it left a visible
-    // sliver of the old page behind.
-    this._rBend = this._r * (1 - 0.998 * flatten);
+    // The crease has run up against the binding and can go no further, and a
+    // round fold there would leave the sheet short by half its bend. Paper
+    // pressed into a stitched spine creases instead: tighten the bend by
+    // exactly as much as the finger keeps pulling, so the held point stays
+    // under it all the way to lying flat on the far side.
+    this._axisD = spineLimit;
+    this._rBend = curlBendFor(across - spineLimit, travel, r);
   }
 
   _stopAnim() {
