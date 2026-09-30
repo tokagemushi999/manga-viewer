@@ -2405,22 +2405,27 @@ class CurlTransition {
       ny = (ny < 0 ? -1 : 1) * maxTilt;
       nx = Math.sqrt(Math.max(0, 1 - ny * ny));
     }
-    this._axisN = [nx, ny];
 
-    // How far the held point must be carried across the crease: the part of
-    // the finger's movement square to it. (What runs along the crease is what
-    // the cap on the lean gives up.)
-    //
     // A forward pull steeper than the cap is less and less a pull toward the
-    // spine, so the grip it asks for fades with its sideways part: a drag
-    // straight up or down turns nothing, instead of folding by the cap's share
-    // of it until the instant it turns vertical and the sheet snaps flat.
+    // spine, so what it asks of the sheet fades with its sideways part — the
+    // grip, and the lean with it. A drag straight up or down then turns
+    // nothing: the crease stands upright through the held point with no paper
+    // beyond it, which is the flat sheet the page is at the moment the drag
+    // turns vertical, rather than a fold held at the cap until that instant.
     let gx = this._gx, gy = this._gy;
     if (this._forward && Math.abs(dy) / span > CURL_MAX_TILT) {
       const fade = (dx / span) / Math.sqrt(1 - CURL_MAX_TILT * CURL_MAX_TILT);
       gx *= fade;
       gy *= fade;
+      ny *= fade;
+      nx = Math.sqrt(1 - ny * ny);
     }
+
+    this._axisN = [nx, ny];
+
+    // How far the held point must be carried across the crease: the part of
+    // the finger's movement square to it. (What runs along the crease is what
+    // the cap on the lean gives up.)
     const travel = Math.max(0, -(gx * nx + gy * ny));
     const across = held[0] * nx + held[1] * ny;   // the held point, along the normal
     const r = this._r;
@@ -2455,13 +2460,16 @@ class CurlTransition {
     // follows as far as paper can — see _swingAboutSpine. (Only turning
     // forward; a sheet drawn back takes its slant from the pull, as designed
     // above.)
-    if (this._forward && travel > 2 * depth) this._swingAboutSpine(held, gx, gy);
+    // It aims where the fold above was taking the held point — the finger as
+    // far as this crease can follow it — so the two meet where one gives way
+    // to the other.
+    if (this._forward && travel > 2 * depth) this._swingAboutSpine(held, -travel * nx, -travel * ny);
   }
 
   /**
    * Fold the sheet flat about a crease through a corner of the spine, aimed
-   * so the held point lands as near the finger as paper that cannot stretch
-   * allows.
+   * so the held point lands as near where it is being taken (tx, ty from
+   * where it was held) as paper that cannot stretch allows.
    *
    * A sheet held by its spine can swing about its foot, with the crease
    * leaning down, or about its head, with the crease leaning up; leaning the
@@ -2471,9 +2479,9 @@ class CurlTransition {
    * here as everywhere, and whichever corner lands the held point nearer the
    * finger is used.
    */
-  _swingAboutSpine(held, gx, gy) {
+  _swingAboutSpine(held, tx, ty) {
     const aspect = this._sheetAspect();
-    const fx = held[0] + gx, fy = held[1] + gy;               // where the grip is asked to go
+    const fx = held[0] + tx, fy = held[1] + ty;               // where the held point is being taken
     let best = null;
     for (const pivotY of [0, aspect]) {
       const hx = held[0], hy = held[1] - pivotY;               // from the pivot
