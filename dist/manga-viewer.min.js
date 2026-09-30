@@ -2436,7 +2436,45 @@ class CurlTransition {
     // exactly as much as the finger keeps pulling, so the held point stays
     // under it all the way to lying flat on the far side.
     this._axisD = spineLimit;
-    this._rBend = curlBendFor(across - spineLimit, travel, r);
+    const depth = across - spineLimit;
+    this._rBend = curlBendFor(depth, travel, r);
+
+    // Pulled beyond even a flat fold along this crease: the finger has left
+    // the circle that a sheet held by its spine can sweep. The sheet still
+    // follows as far as paper can — it swings about the corner of the spine
+    // the crease runs through, keeping the held point on that circle at the
+    // spot nearest the finger. (Only turning forward; a sheet drawn back
+    // takes its slant from the pull, as designed above.)
+    if (this._forward && travel > 2 * depth) this._swingAboutSpine(held, ny <= 0);
+  }
+
+  /**
+   * Fold the sheet flat about a crease through one corner of the spine,
+   * aimed so the held point lands as near the finger as the paper allows.
+   * Leaves the crease as it is when the finger is within reach, or when
+   * the swing would lift the bound edge or lean past the cap.
+   */
+  _swingAboutSpine(held, aboutFoot) {
+    const pivotY = aboutFoot ? 0 : this._sheetAspect();
+    const hx = held[0], hy = held[1] - pivotY;                   // held point, from the pivot
+    const fx = held[0] + this._gx, fy = held[1] + this._gy - pivotY;
+    const reach = Math.hypot(hx, hy);
+    const want = Math.hypot(fx, fy);
+    if (!(want > reach) || want < 1e-6) return;
+    // On the circle, toward the finger.
+    const rx = fx / want * reach, ry = fy / want * reach;
+    const mx = hx - rx, my = hy - ry;
+    const m = Math.hypot(mx, my);
+    if (m < 1e-6) return;
+    const nx = mx / m, ny = my / m;
+    // Swinging about the foot of the spine, the crease must lean down to
+    // keep the rest of the spine on the side that stays; about the head,
+    // up. Past that the bound edge would lift.
+    if (aboutFoot ? ny > 0 : ny < 0) return;
+    if (Math.abs(ny) > CURL_MAX_TILT) return;
+    this._axisN = [nx, ny];
+    this._axisD = ny * pivotY;
+    this._rBend = 0;
   }
 
   _stopAnim() {
