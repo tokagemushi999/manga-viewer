@@ -1622,6 +1622,11 @@ const CURL_SPRING_K = 130;     // spring stiffness pulling a released sheet home
 const CURL_SPRING_ZETA = 0.78; // damping ratio — a little under critical, so the paper
                                // lands with one soft flap instead of easing to a stop
 const CURL_SETTLE_TIMEOUT_MS = 1500;
+// The curl gives up on WebGL only when contexts are lost in quick succession.
+// A phone that loses one each time the app goes to the background should not
+// lose the curl for the rest of the book.
+const CURL_MAX_GL_LOSSES = 3;
+const CURL_GL_LOSS_WINDOW_MS = 60000;
 const CURL_MAX_DPR = 3;        // phones run at 3; rendering at 2 and letting the
                                // display scale it up is what makes the edges ragged
 
@@ -1847,6 +1852,7 @@ class CurlTransition {
     this._meshCount = 0;
     this._quadBuf = null;
     this._glFailed = false;
+    this._glLosses = [];         // when recent contexts were lost
 
     this._texTop = null;
     this._texBottom = null;
@@ -2054,10 +2060,32 @@ class CurlTransition {
   destroy() {
     this._stopAnim();
     this._releaseTextures();
-    if (this._canvas && this._canvas.parentNode) this._canvas.parentNode.removeChild(this._canvas);
-    this._canvas = null;
-    this._gl = null;
+    this._dropGL();
     this._fallback.destroy();
+  }
+
+  /**
+   * Decode the pages either side of the current one ahead of time.
+   *
+   * Drawing an image the browser has only downloaded makes it decode on the
+   * spot — tens of milliseconds a page, spent on the first frame of the drag
+   * that reaches for it, which is exactly where a stall shows.
+   */
+  warm() {
+    if (!this.canRun()) return;
+    const v = this._v;
+    const cur = v._currentSlotIndex;
+    for (const idx of [cur - 1, cur, cur + 1]) {
+      if (idx < 0 || idx >= v._slots.length) continue;
+      const slotEl = v._slotTrack.querySelector('.mv-page-slot[data-slot="' + idx + '"]');
+      if (!slotEl) continue;
+      slotEl.querySelectorAll('img').forEach((img) => {
+        if (img.dataset.mvDecoded || typeof img.decode !== 'function') return;
+        img.dataset.mvDecoded = '1';
+        if (img.loading === 'lazy') img.loading = 'eager';
+        img.decode().catch(() => { delete img.dataset.mvDecoded; });
+      });
+    }
   }
 
   // ─── Internals ───
@@ -2470,16 +2498,36 @@ class CurlTransition {
     };
     this._buildMesh();
 
-    // The context can be lost on memory pressure — drop back to slide for good.
-    canvas.addEventListener('webglcontextlost', (e) => {
-      e.preventDefault();
-      this._glFailed = true;
-      this._gl = null;
+    // The context can be lost — memory pressure, a GPU reset, a phone putting
+    // the app in the background. This canvas is done with; the next turn
+    // makes a new one, and slide covers only the turns in between. WebGL is
+    // given up on only if contexts keep being lost.
+    canvas.addEventListener('webglcontextlost', () => {
+      if (this._canvas !== canvas) return;
       if (this._active) this._finish();
+      this._dropGL();
+      const now = Date.now();
+      this._glLosses = this._glLosses.filter(t => now - t < CURL_GL_LOSS_WINDOW_MS);
+      this._glLosses.push(now);
+      if (this._glLosses.length >= CURL_MAX_GL_LOSSES) this._glFailed = true;
     });
 
     v._main.appendChild(canvas);
     return true;
+  }
+
+  /** Let go of the canvas and everything that lived in its context. */
+  _dropGL() {
+    if (this._canvas && this._canvas.parentNode) this._canvas.parentNode.removeChild(this._canvas);
+    this._canvas = null;
+    this._gl = null;
+    this._prog = null;
+    this._loc = null;
+    this._meshBuf = null;
+    this._meshIdx = null;
+    this._quadBuf = null;
+    this._texTop = null;
+    this._texBottom = null;
   }
 
   _link(gl, vsSrc, fsSrc) {
@@ -3637,6 +3685,9 @@ export default class MangaViewer {
         });
       });
     }
+    // A transition that draws pages itself wants the neighbours decoded, not
+    // just downloaded.
+    if (this._transition && this._transition.warm) this._transition.warm();
   }
 
   // ─── Orientation / Spread ───
