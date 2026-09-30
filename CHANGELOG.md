@@ -15,6 +15,11 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   a centred page cannot be turned with `pageTransition: 'curl'`: with no gutter
   and no bound edge there is nothing to hinge it on, so it falls back to
   sliding.
+- **A left-bound book's cover now sits on the right of a two-page view.** It
+  used to sit on the left, the spine side, where a real book is never opened
+  from — the curl turned the blank beside it instead. It is now at the
+  reading-end side in both directions (left when bound on the right, as
+  before; right when bound on the left), in slide mode as well.
 
 ### Added
 - **A released page falls with the weight of paper.** The settle is a damped
@@ -32,12 +37,13 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   `'curl'`, a paper-like page turn drawn with WebGL. The sheet bends around a
   cylinder, shades from the surface normal, and casts a shadow on the page
   beneath.
-  - **The page is taken by a corner, and creases at whatever angle that
-    implies.** Paper cannot stretch, so the corner in hand stays one sheet-width
-    from the spine and rides an arc; pulling straight sideways therefore carries
-    it upward too, and the fold comes out diagonal — the same reason a real page
-    creases at an angle when the hand moves level. Grip near the top and the top
-    corner lifts; grip near the bottom and the bottom one does.
+  - **The page is taken wherever the finger lands, and that point stays under
+    the finger.** Take a corner and the corner follows the fingertip; take the
+    middle of the free edge and that is what follows. The crease runs square to
+    the way the hand moves, so a diagonal pull folds the page diagonally (the
+    lean is capped, since a sheet held by its spine cannot swing wide). Turning
+    back draws the sheet up off the far side the same way, starting from where a
+    forward turn ends.
   - **In a spread only the leaf on the free side lifts.** The other half stays
     bound, the crease runs down the gutter, and the sheet's reverse carries the
     matching half of the next spread — so turning a left-hand page reveals the
@@ -53,6 +59,39 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   transitions do not need new branches through the navigation code.
 
 ### Fixed
+- **Turning a page is steadier under the finger** (`pageTransition: 'curl'`):
+  - A touch with no sideways movement in its first step — or one that passes
+    back over its starting point — no longer switches the whole gesture to
+    sliding.
+  - A tap while the last page is still landing no longer carries it back up
+    before the view jumps on; a new drag lands it and starts the next turn
+    under the finger; a pinch ends the turn instead of freezing it on screen.
+  - A drag that begins while the corner hint is playing takes the page where
+    the finger is, not where the hint held it.
+- **The sheet no longer runs ahead of the finger.** The crease was placed as
+  if the held point had already gone round the whole bend, which in a spread
+  put it up to 70px ahead early in a drag. It now stays under the finger (and,
+  turning back, moves from the first pixel instead of after ~180px). Past the
+  spine, a diagonal pull swings the sheet about the corner of the spine rather
+  than leaving it behind, and a near-vertical drag no longer flickers between
+  a large fold and none.
+- **Nothing of the old page is left at the end of a turn.** On a phone's
+  single page a sliver stayed along the spine, and a turn run by key or tap
+  came to rest still leaning, with a wedge of the old page standing until
+  the view snapped over.
+- **Turning back by key or tap before any drag** no longer creases along NaN.
+- **Turning back no longer swings the whole page at the first touch.** A
+  backward drag with the slightest slant in its first pixel used to rotate the
+  sheet lying on the far side by up to twice the lean cap; the slant now grows
+  in with the pull. A return pulled all the way lands flat instead of snapping
+  flat.
+- **The reverse of a turning sheet in a left-bound spread** was printed
+  mirror-wise.
+- **A lost WebGL context no longer switches the curl off for good.** The next
+  turn makes a new canvas; the curl gives up only if contexts keep being lost
+  (three within a minute).
+- **The pages either side of the current one are decoded ahead of time**, so
+  the first turn onto a new page does not stall while the browser decodes it.
 - **Rubber-banding at the wrong end in RTL.** Dragging forward from the first
   slot of a right-bound book was treated as pulling past the start, so the page
   resisted instead of turning. The edge test now accounts for reading
