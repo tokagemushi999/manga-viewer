@@ -2369,8 +2369,15 @@ class CurlTransition {
    * the spine.
    */
   _creaseFromGrip() {
+    // Turning back, the sheet comes to rest flat on its own side, where there
+    // is nothing left to fold: whatever the finger has drifted up or down by
+    // then has nowhere to go. Its pull fades over the last stretch of the
+    // return, so the sheet arrives flat rather than snapping flat at the end.
+    const drift = this._forward
+      ? this._gy
+      : this._gy * Math.min(1, Math.max(0, -this._gx) / CURL_TILT_RAMP);
     const held = [1, this._gripY];                           // where it was taken
-    const now = [held[0] + this._gx, held[1] + this._gy];    // where it is now
+    const now = [held[0] + this._gx, held[1] + drift];       // where it is now
 
     // Which way the fold runs. Going forward this is simply the way the held
     // point has moved. Going back it cannot be: the sheet begins fully turned,
@@ -2412,7 +2419,7 @@ class CurlTransition {
     // nothing: the crease stands upright through the held point with no paper
     // beyond it, which is the flat sheet the page is at the moment the drag
     // turns vertical, rather than a fold held at the cap until that instant.
-    let gx = this._gx, gy = this._gy;
+    let gx = this._gx, gy = drift;
     if (this._forward && Math.abs(dy) / span > CURL_MAX_TILT) {
       const fade = (dx / span) / Math.sqrt(1 - CURL_MAX_TILT * CURL_MAX_TILT);
       gx *= fade;
