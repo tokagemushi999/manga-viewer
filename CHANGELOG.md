@@ -71,7 +71,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **The sheet no longer runs ahead of the finger.** The crease was placed as
   if the held point had already gone round the whole bend, which in a spread
   put it up to 70px ahead early in a drag. It now stays under the finger (and,
-  turning back, moves from the first pixel instead of after ~180px).
+  turning back, moves from the first pixel instead of after ~180px). Past the
+  spine, a diagonal pull swings the sheet about the corner of the spine rather
+  than leaving it behind, and a near-vertical drag no longer flickers between
+  a large fold and none.
 - **Nothing of the old page is left at the end of a turn.** On a phone's
   single page a sliver stayed along the spine, and a turn run by key or tap
   came to rest still leaning, with a wedge of the old page standing until
