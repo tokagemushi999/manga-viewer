@@ -59,6 +59,13 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   transitions do not need new branches through the navigation code.
 
 ### Fixed
+- **Folding and unfolding a phone keeps your page.** A two-page view used to
+  report its first page, so folding back to one page went back a page (5 →
+  4–5 → 4). The page being read is kept while it is in view; it is also what
+  `currentPage` returns. A page mid-turn when the screen changes width (fold,
+  unfold, rotation) is let go instead of being drawn stretched over the new
+  screen. Header, footer and zoom buttons respect the left and right
+  safe-area insets separately (folding phones often have them uneven).
 - **Turning a page is steadier under the finger** (`pageTransition: 'curl'`):
   - A touch with no sideways movement in its first step — or one that passes
     back over its starting point — no longer switches the whole gesture to
