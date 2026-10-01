@@ -816,6 +816,7 @@ body.mv-pseudo-fullscreen-body {
 .mv-zoom-controls {
   position: fixed;
   bottom: 100px;
+  right: 16px;
   right: calc(16px + env(safe-area-inset-right, 0px));
   z-index: 60;
   display: none;
@@ -3194,6 +3195,7 @@ export default class MangaViewer {
     // ── State ──
     this._currentSlotIndex = 0;
     this._readingPage = null;   // page index being read, when the view shows two
+    this._progressRestored = false; // saved progress has been read; saving may begin
     this._slots = [];
     this._spreadMode = false;
     this._uiVisible = true;
@@ -3544,10 +3546,15 @@ export default class MangaViewer {
     this._updateUI();
     this._setupEvents();
 
-    // Resume reading
+    // Resume reading. Nothing is saved until the reader has answered: the
+    // first _updateUI() above, and anything else that redraws while the
+    // prompt is up (or the page being closed), would otherwise record page 1
+    // over where they left off.
     const saved = this._loadProgress();
     if (saved && saved.pageIndex > 0) {
       this._showResumeDialog(saved);
+    } else {
+      this._progressRestored = true;
     }
 
     // Hide loading
@@ -4420,12 +4427,12 @@ export default class MangaViewer {
     // Bookmark state
     this._updateBookmarkBtn();
 
-    // a11y page announcement
-    this._announcePage(first);
+    // a11y page announcement — the page being read, as currentPage reports it
+    this._announcePage(this._readingPage + 1);
 
     // Callbacks
     if (typeof this.opts.onPageChange === 'function') {
-      this.opts.onPageChange(first, this._totalPages);
+      this.opts.onPageChange(this._readingPage + 1, this._totalPages);
     }
     if (typeof this.opts.onComplete === 'function' && this._currentSlotIndex === this._slots.length - 1) {
       this.opts.onComplete();
@@ -4702,6 +4709,7 @@ export default class MangaViewer {
 
   // ─── Progress ───
   _saveProgress() {
+    if (!this._progressRestored) return;
     const pageIndex = this._getCurrentPageIndex();
     try {
       localStorage.setItem(this.opts.storageKey, JSON.stringify({
@@ -4735,10 +4743,10 @@ export default class MangaViewer {
     card.appendChild(el('div', { className: 'mv-resume-subtitle' }, this._msg.resumeSubtitle(pageNum)));
 
     const btns = el('div', { className: 'mv-resume-buttons' });
-    btns.appendChild(el('button', { className: 'mv-resume-btn mv-secondary', onClick: () => { overlay.remove(); try { localStorage.removeItem(this.opts.storageKey); } catch (_) {} } }, this._msg.resumeStart));
+    btns.appendChild(el('button', { className: 'mv-resume-btn mv-secondary', onClick: () => { overlay.remove(); this._progressRestored = true; try { localStorage.removeItem(this.opts.storageKey); } catch (_) {} } }, this._msg.resumeStart));
     const resumeBtn = el('button', {
       className: 'mv-resume-btn mv-primary',
-      onClick: () => { overlay.remove(); this._setManagedTimeout(() => this.goToPage(saved.pageIndex + 1), RESUME_NAVIGATE_DELAY_MS); },
+      onClick: () => { overlay.remove(); this._progressRestored = true; this._setManagedTimeout(() => this.goToPage(saved.pageIndex + 1), RESUME_NAVIGATE_DELAY_MS); },
     });
     const resumeIcon = _svgIcon(ICONS.play);
     const resumeText = document.createElement('span');

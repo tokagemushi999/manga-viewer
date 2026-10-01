@@ -612,6 +612,7 @@ body.mv-pseudo-fullscreen-body {
 .mv-zoom-controls {
   position: fixed;
   bottom: 100px;
+  right: 16px;
   right: calc(16px + env(safe-area-inset-right, 0px));
   z-index: 60;
   display: none;
