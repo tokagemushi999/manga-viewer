@@ -67,7 +67,9 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   screen. Header, footer and zoom buttons respect the left and right
   safe-area insets separately (folding phones often have them uneven).
   `onPageChange` and the spoken page announcement report the page being read
-  too.
+  too — in a two-page view that can now be its second page, so a host that
+  derived the spread as "page, page + 1" from it should read the layout
+  instead.
 - **"Continue reading" works again.** Start-up saved page 1 over the stored
   position before reading it, so the prompt never appeared. Nothing is saved
   now until the reader has answered it.

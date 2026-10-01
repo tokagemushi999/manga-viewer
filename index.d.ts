@@ -118,6 +118,13 @@ export interface MangaViewerOptions {
   viewMode?: 'page' | 'scroll';
   adsense?: { client: string; slot: string } | null;
   previewLimit?: number | null;
+  /**
+   * Called whenever the view moves. `currentPage` (1-based) is the page being
+   * read — the same value as the `currentPage` getter. In a two-page view it
+   * is usually the first page of the spread, but it can be the second: open a
+   * spread by unfolding or rotating from a single page, or with goToPage(), and
+   * it stays on the page the reader was on.
+   */
   onPageChange?: ((currentPage: number, totalPages: number) => void) | null;
   onComplete?: (() => void) | null;
   storageKey?: string;
