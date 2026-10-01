@@ -416,6 +416,9 @@ body.mv-pseudo-fullscreen-body {
   height: auto;
   padding: 8px 12px;
   padding-top: max(8px, env(safe-area-inset-top));
+  /* Side insets can differ (a folding iPhone keeps system UI on one side). */
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -505,6 +508,8 @@ body.mv-pseudo-fullscreen-body {
   right: 0;
   padding: 8px 12px;
   padding-bottom: calc(max(8px, env(safe-area-inset-bottom)) + var(--mv-footer-bottom-padding) + var(--mv-pwa-footer-bonus));
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
   z-index: 50;
   background: var(--mv-footer-bg);
   opacity: 1;
@@ -515,6 +520,8 @@ body.mv-pseudo-fullscreen-body {
   .mv-footer {
     padding: 10px 16px 16px 16px;
     padding-bottom: calc(max(16px, calc(env(safe-area-inset-bottom) + 8px)) + var(--mv-footer-bottom-padding) + var(--mv-pwa-footer-bonus));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
   }
 }
 
@@ -809,7 +816,7 @@ body.mv-pseudo-fullscreen-body {
 .mv-zoom-controls {
   position: fixed;
   bottom: 100px;
-  right: 16px;
+  right: calc(16px + env(safe-area-inset-right, 0px));
   z-index: 60;
   display: none;
   flex-direction: column;
@@ -3186,6 +3193,7 @@ export default class MangaViewer {
 
     // ── State ──
     this._currentSlotIndex = 0;
+    this._readingPage = null;   // page index being read, when the view shows two
     this._slots = [];
     this._spreadMode = false;
     this._uiVisible = true;
@@ -3859,7 +3867,16 @@ export default class MangaViewer {
     if (this._resizeRaf !== null) return;
     this._resizeRaf = requestAnimationFrame(() => {
       this._resizeRaf = null;
-      this._containerWidth = this._main.offsetWidth;
+      const width = this._main.offsetWidth;
+      // A fold, an unfold or a turn of the phone gives the page a new shape. A
+      // page caught mid-turn belongs to the old one: let go of it rather than
+      // keep drawing it stretched across the new screen. (Only the width is
+      // watched — the height also moves when browser toolbars come and go.)
+      if (width !== this._containerWidth && this._containerWidth) {
+        this._isDragging = false;
+        if (this._transition) this._transition.interrupt();
+      }
+      this._containerWidth = width;
       this._isMobile = window.matchMedia('(max-width: 768px)').matches;
       this._checkOrientation();
       this._updateTrackPosition(false);
@@ -4354,6 +4371,7 @@ export default class MangaViewer {
    * Go to a specific page number (1-indexed).
    */
   goToPage(pageNum) {
+    this._readingPage = pageNum - 1;
     this.goToSlot(this._findSlotByPageIndex(pageNum - 1));
   }
 
@@ -4374,6 +4392,7 @@ export default class MangaViewer {
   _updateUI() {
     const slot = this._slots[this._currentSlotIndex];
     if (!slot) return;
+    this._readingPage = this._getCurrentPageIndex();
 
     const first = slot.pages[0] + 1;
     const last = slot.pages[slot.pages.length - 1] + 1;
@@ -4667,7 +4686,11 @@ export default class MangaViewer {
   // ─── Page index helpers ───
   _getCurrentPageIndex() {
     const slot = this._slots[this._currentSlotIndex];
-    return slot ? slot.pages[0] : 0;
+    if (!slot) return 0;
+    // In a two-page view either page could be the one being read. Keep the
+    // one the reader was on when the view changed shape: a phone unfolded on
+    // page 5 shows 4–5, and folded again it should go back to 5, not 4.
+    return slot.pages.includes(this._readingPage) ? this._readingPage : slot.pages[0];
   }
 
   _findSlotByPageIndex(pageIdx) {
@@ -4715,7 +4738,7 @@ export default class MangaViewer {
     btns.appendChild(el('button', { className: 'mv-resume-btn mv-secondary', onClick: () => { overlay.remove(); try { localStorage.removeItem(this.opts.storageKey); } catch (_) {} } }, this._msg.resumeStart));
     const resumeBtn = el('button', {
       className: 'mv-resume-btn mv-primary',
-      onClick: () => { overlay.remove(); this._setManagedTimeout(() => this.goToSlot(this._findSlotByPageIndex(saved.pageIndex)), RESUME_NAVIGATE_DELAY_MS); },
+      onClick: () => { overlay.remove(); this._setManagedTimeout(() => this.goToPage(saved.pageIndex + 1), RESUME_NAVIGATE_DELAY_MS); },
     });
     const resumeIcon = _svgIcon(ICONS.play);
     const resumeText = document.createElement('span');

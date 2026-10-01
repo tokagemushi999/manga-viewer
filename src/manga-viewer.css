@@ -212,6 +212,9 @@ body.mv-pseudo-fullscreen-body {
   height: auto;
   padding: 8px 12px;
   padding-top: max(8px, env(safe-area-inset-top));
+  /* Side insets can differ (a folding iPhone keeps system UI on one side). */
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -301,6 +304,8 @@ body.mv-pseudo-fullscreen-body {
   right: 0;
   padding: 8px 12px;
   padding-bottom: calc(max(8px, env(safe-area-inset-bottom)) + var(--mv-footer-bottom-padding) + var(--mv-pwa-footer-bonus));
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
   z-index: 50;
   background: var(--mv-footer-bg);
   opacity: 1;
@@ -311,6 +316,8 @@ body.mv-pseudo-fullscreen-body {
   .mv-footer {
     padding: 10px 16px 16px 16px;
     padding-bottom: calc(max(16px, calc(env(safe-area-inset-bottom) + 8px)) + var(--mv-footer-bottom-padding) + var(--mv-pwa-footer-bonus));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
   }
 }
 
@@ -605,7 +612,7 @@ body.mv-pseudo-fullscreen-body {
 .mv-zoom-controls {
   position: fixed;
   bottom: 100px;
-  right: 16px;
+  right: calc(16px + env(safe-area-inset-right, 0px));
   z-index: 60;
   display: none;
   flex-direction: column;
